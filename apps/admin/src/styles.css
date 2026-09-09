@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+:root {
+  --admin-bg: #f6f7f5;
+  --admin-surface: #ffffff;
+  --admin-border: #e3e5e0;
+  --admin-text: #1f2318;
+  --admin-muted: #6b7268;
+  --admin-primary: #4b5d3a;
+  --admin-primary-foreground: #ffffff;
+}
+
+body {
+  background: var(--admin-bg);
+  color: var(--admin-text);
+  font-family: "Inter", system-ui, sans-serif;
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@rajadhaniyam/config",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Shared tsconfig base and lint conventions for the Rajadhaniyam workspace.",
+  "files": [
+    "tsconfig.base.json"
+  ]
+}
