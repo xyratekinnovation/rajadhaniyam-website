@@ -12,6 +12,15 @@
  */
 import { prisma } from "../src/client";
 
+// Every mock product shares this table (see apps/storefront/src/lib/shop-data.ts).
+const nutritionFacts = [
+  { label: "Energy", value: "361 kcal" },
+  { label: "Protein", value: "11.6 g" },
+  { label: "Dietary Fibre", value: "8.5 g" },
+  { label: "Carbohydrates", value: "67.5 g" },
+  { label: "Total Fat", value: "4.2 g" },
+];
+
 const categories = [
   {
     slug: "millet-grains",
@@ -209,6 +218,7 @@ async function main() {
         name: p.name,
         description: p.description,
         ingredients: p.ingredients,
+        nutritionFacts,
         categoryId,
         status: "ACTIVE",
         bestseller: p.bestseller,
@@ -218,6 +228,7 @@ async function main() {
         name: p.name,
         description: p.description,
         ingredients: p.ingredients,
+        nutritionFacts,
         categoryId,
         bestseller: p.bestseller,
       },

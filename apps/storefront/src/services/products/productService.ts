@@ -1,11 +1,7 @@
 import type { Product } from "@rajadhaniyam/shared";
-import { MockProductRepository, type ProductRepository } from "./productRepository";
+import { ApiProductRepository, type ProductRepository } from "./productRepository";
 
-/**
- * Swap this single line for an ApiProductRepository once apps/api exposes
- * real product endpoints — everything below (and every caller) stays the same.
- */
-const repository: ProductRepository = new MockProductRepository();
+const repository: ProductRepository = new ApiProductRepository();
 
 export const productService = {
   getProducts: (): Promise<Product[]> => repository.getAll(),

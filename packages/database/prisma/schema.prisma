@@ -128,12 +128,15 @@ model Category {
 }
 
 model Product {
-  id          String          @id @default(cuid())
-  slug        String          @unique
-  name        String
-  description String?
-  ingredients String?
-  categoryId  String
+  id             String          @id @default(cuid())
+  slug           String          @unique
+  name           String
+  description    String?
+  ingredients    String?
+  // Array of { label: string, value: string } — no dedicated table since it's
+  // display-only copy, not queried/filtered on.
+  nutritionFacts Json?
+  categoryId     String
   category    Category        @relation(fields: [categoryId], references: [id])
   status      ProductStatus   @default(DRAFT)
   bestseller  Boolean         @default(false)

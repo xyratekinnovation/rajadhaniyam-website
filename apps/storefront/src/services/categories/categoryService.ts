@@ -1,7 +1,7 @@
 import type { Category } from "@rajadhaniyam/shared";
-import { MockCategoryRepository, type CategoryRepository } from "./categoryRepository";
+import { ApiCategoryRepository, type CategoryRepository } from "./categoryRepository";
 
-const repository: CategoryRepository = new MockCategoryRepository();
+const repository: CategoryRepository = new ApiCategoryRepository();
 
 export const categoryService = {
   getCategories: (): Promise<Category[]> => repository.getAll(),

@@ -45,19 +45,32 @@ migrations are finalized against a hosted database.
   The pooled `DATABASE_URL` also needs a `?pgbouncer=true` query param or
   every query fails with `prepared statement "s0" already exists`.
 
-## Phase 3 — Product / Category APIs
+## Phase 3 — Product / Category APIs ✅ (read side)
 
 - **Objective:** Replace the `products`/`categories` module stubs in
   `apps/api` with real Prisma-backed handlers.
-- **Backend:** implement list/get/create/update/delete for Product,
-  ProductVariant, ProductImage, Category.
-- **Frontend:** add `ApiProductRepository`/`ApiCategoryRepository` in
-  `apps/storefront/src/services`, swap the one line in
-  `productService.ts`/`categoryService.ts` that currently instantiates the
-  Mock repository.
-- **Admin:** wire `ProductsListPage`/`ProductFormPage` to the real API.
+- **Backend:** `productsService`/`categoriesService` now query Prisma for
+  real, mapping DB rows (Product + variants + images + review aggregate)
+  to the shared `Product`/`Category` DTO shape. `GET /products` supports
+  `?category=slug` and `?bestseller=true` filters. Create/update/delete
+  are still `501` stubs — real admin mutations are Phase 4.
+- **Frontend:** added `ApiProductRepository`/`ApiCategoryRepository` in
+  `apps/storefront/src/services`, swapped the one line in
+  `productService.ts`/`categoryService.ts` — no other file changed.
+  Verified in-browser: homepage, `/shop` with category filtering, and a
+  product detail page (weights, price, ingredients, nutrition, related
+  products) all render from the real database with no visual regression.
+- **Images:** seeded rows store relative paths (`/assets/p-kambu.jpg`);
+  the API resolves them to an absolute URL against `STOREFRONT_URL`, and
+  the actual files were copied into `apps/storefront/public/assets/` so
+  they resolve for real today — a stand-in for Phase 4's real image
+  hosting, not fake data.
+- **Not done yet:** `apps/admin`'s `ProductsListPage`/`ProductFormPage`
+  still show placeholder data (Phase 4). `shop-data.ts` was **not**
+  deleted — nothing outside the Mock repositories reads it directly
+  anymore, but keeping it costs nothing and it's a useful reference.
 - **Completion criteria:** storefront renders the same pages from the real
-  API instead of `shop-data.ts`; `shop-data.ts` can then be deleted.
+  API instead of `shop-data.ts`. ✅
 
 ## Phase 4 — Admin Product Management
 

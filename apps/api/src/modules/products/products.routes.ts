@@ -5,7 +5,9 @@ import { productsService } from "./products.service";
 export const productsRoutes = new Hono();
 
 productsRoutes.get("/", async (c) => {
-  const products = await productsService.list();
+  const categorySlug = c.req.query("category");
+  const bestseller = c.req.query("bestseller") === "true";
+  const products = await productsService.list({ categorySlug, bestseller });
   return c.json(paginated(products));
 });
 

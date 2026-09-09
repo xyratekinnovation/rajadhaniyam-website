@@ -128,33 +128,33 @@ a real Supabase database and seeded with the storefront's mock catalog. See
 setup (each contributor needs their own `DATABASE_URL`/`DIRECT_URL` in a
 local `.env` — never committed).
 
-## What's mocked today
+## What's real vs. mocked today
 
-- **Product/category data** — `apps/storefront/src/lib/shop-data.ts`
-  (unchanged hardcoded data), now read through
-  `apps/storefront/src/services/products` and `.../categories`, which sit
-  behind a `ProductRepository`/`CategoryRepository` interface. Swapping the
-  mock repository for an API-backed one (Phase 3 of the roadmap) requires
-  changing one line, not any UI component.
+- **Product/category data** — real. `apps/storefront/src/services/products`
+  and `.../categories` read through `ApiProductRepository`/
+  `ApiCategoryRepository`, which call `apps/api`, which queries Prisma
+  against Supabase. `apps/storefront/src/lib/shop-data.ts` still exists
+  (kept as reference/seed source) but nothing outside the old
+  `MockProductRepository`/`MockCategoryRepository` reads it anymore.
 - **Cart** — still local React state
   (`apps/storefront/src/lib/cart.tsx`), unchanged behavior. Server-side
   cart sync is Phase 6.
 - **Checkout** — the form UI is real; submitting still just clears the
   local cart and navigates to `/order-success`, no order is created yet
   (Phase 7).
-- **`apps/api`** — every module (`auth`, `products`, `categories`,
-  `customers`, `cart`, `orders`, `inventory`, `payments`, `coupons`,
-  `content`, `analytics`) is scaffolded with real route shapes, Zod
-  validation on inputs, and either an empty-list response or a `501 Not
-Implemented` — no business logic yet.
+- **`apps/api`** — `products` and `categories` are real (Prisma-backed
+  reads; create/update/delete are still `501` stubs, Phase 4). Every other
+  module (`auth`, `customers`, `cart`, `orders`, `inventory`, `payments`,
+  `coupons`, `content`, `analytics`) is still scaffolded with real route
+  shapes and Zod validation but no business logic yet.
 - **`apps/admin`** — every planned page exists and is reachable
   (Dashboard, Products, Add/Edit Product, Categories, Orders, Order
   Detail, Customers, Inventory, Coupons, Banners, Content, Settings,
   Login) with layout, sidebar, table/form/state foundations — no page is
-  wired to real data yet.
-- **`packages/database`** — connected to a real Supabase database, schema
-  migrated and seeded with the mock catalog, but `apps/api`'s route modules
-  don't query it yet themselves (Phase 3).
+  wired to real data yet (Phase 4).
+- **`packages/database`** — real Supabase database, schema migrated and
+  seeded (5 categories, 10 products, 18 variants) — see
+  [`packages/database/README.md`](packages/database/README.md).
 
 ## What's ready for backend integration
 

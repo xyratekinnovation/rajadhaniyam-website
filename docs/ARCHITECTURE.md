@@ -56,17 +56,16 @@ repository/service abstraction (`src/services/products`,
 `MockProductRepository` for an `ApiProductRepository` later is a one-line
 change — no UI component needs to be rewritten.
 
-## Data flow (current state)
+## Data flow (current state, since Phase 3)
 
 ```
-storefront route loader ──▶ productService / categoryService ──▶ MockProductRepository ──▶ shop-data.ts (hardcoded)
+storefront route loader ──▶ productService / categoryService ──▶ ApiProductRepository / ApiCategoryRepository ──▶ apps/api /products, /categories ──▶ packages/database (Prisma) ──▶ Supabase Postgres
 ```
 
-## Data flow (after Phase 3 of the roadmap)
-
-```
-storefront route loader ──▶ productService ──▶ ApiProductRepository ──▶ apps/api /products ──▶ packages/database (Prisma) ──▶ PostgreSQL
-```
+`MockProductRepository`/`MockCategoryRepository` (reading
+`shop-data.ts`) still exist behind the same interface — useful if `apps/api`
+or the database is unreachable — but nothing instantiates them by default
+anymore.
 
 ## Generated files — do not hand-edit
 
