@@ -5,7 +5,7 @@ import type {
   ProductInput,
   ProductNutritionFact,
 } from "@rajadhaniyam/shared";
-import { env } from "../../config/env";
+import { absoluteUrl } from "../../utils/images";
 
 const include = {
   category: true,
@@ -22,16 +22,6 @@ type ProductRow = NonNullable<Awaited<ReturnType<typeof findOne>>>;
 
 function findOne(where: { slug: string }) {
   return prisma.product.findUnique({ where, include });
-}
-
-// Absolute so the response works the same regardless of which app (storefront,
-// admin) requests it. Seeded rows store relative paths (see prisma/seed.ts)
-// because there's no real image hosting yet — this resolves those against the
-// one app that currently serves them as static files. Admin-entered URLs may
-// already be absolute (a real hosted image), so only relative paths get
-// prefixed — otherwise this would mangle a real URL into garbage.
-function absoluteUrl(path: string): string {
-  return /^https?:\/\//.test(path) ? path : `${env.STOREFRONT_URL}${path}`;
 }
 
 function variantSku(productSlug: string, weight: string): string {

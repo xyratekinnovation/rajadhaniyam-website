@@ -141,9 +141,12 @@ local `.env` — never committed).
   address management) are backed by `apps/api`. Session lives in
   `localStorage` (not a cookie), so it's client-side only — see
   `apps/storefront/src/lib/auth.tsx`'s comment for what that means for SSR.
-- **Cart** — still local React state
-  (`apps/storefront/src/lib/cart.tsx`), unchanged behavior, and not yet
-  tied to the logged-in customer. Server-side cart sync is Phase 6.
+- **Cart** — real. `apps/storefront/src/lib/cart.tsx` still keeps local
+  React state as the source of truth for instant UI feedback (same
+  `useCart()` surface, no component changed), backed by a real server
+  cart (`apps/api`'s `/cart`) for both guests (a persistent per-browser
+  session id) and logged-in customers, merged automatically on
+  login/register.
 - **Checkout** — the form UI is real; submitting still just clears the
   local cart and navigates to `/order-success`, no order is created yet
   (Phase 7).
@@ -151,10 +154,11 @@ local `.env` — never committed).
   create/update/delete under `/admin/products`/`/admin/categories`
   (Phase 4), now actually protected by real JWT verification (Phase 5).
   `auth` is real: register/login (customer + separate admin credential
-  set), `/auth/me`, full address CRUD. Every other module (`customers`,
-  `cart`, `orders`, `inventory`, `payments`, `coupons`, `content`,
-  `analytics`) is still scaffolded with real route shapes and Zod
-  validation but no business logic yet.
+  set), `/auth/me`, full address CRUD. `cart` is real (Phase 6, guest +
+  logged-in sync). Every other module (`customers`, `orders`,
+  `inventory`, `payments`, `coupons`, `content`, `analytics`) is still
+  scaffolded with real route shapes and Zod validation but no business
+  logic yet.
 - **`apps/admin`** — Products and Categories (list/add/edit/delete) are
   real, backed by `apps/api`. Every other planned page (Dashboard, Orders,
   Order Detail, Customers, Inventory, Coupons, Banners, Content, Settings,

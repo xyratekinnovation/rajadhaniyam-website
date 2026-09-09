@@ -10,14 +10,14 @@ export const authRoutes = new Hono<AuthEnv>();
 authRoutes.post("/register", async (c) => {
   const parsed = registerSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
-  const result = await authService.register(parsed.data);
+  const result = await authService.register(parsed.data, c.req.header("x-cart-session"));
   return c.json(ok(result), 201);
 });
 
 authRoutes.post("/login", async (c) => {
   const parsed = loginSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
-  const result = await authService.login(parsed.data);
+  const result = await authService.login(parsed.data, c.req.header("x-cart-session"));
   return c.json(ok(result));
 });
 

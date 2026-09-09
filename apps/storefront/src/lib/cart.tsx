@@ -1,6 +1,16 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from "@rajadhaniyam/shared";
 import type { Product } from "./shop-data";
+import { useAuth } from "./auth";
+import { cartApi } from "@/services/api/cart";
 
 export { FREE_SHIPPING_THRESHOLD };
 
@@ -30,9 +40,40 @@ type CartCtx = {
 
 const Ctx = createContext<CartCtx | null>(null);
 
+/**
+ * Phase 6: local state stays the source of truth for instant UI feedback
+ * (every mutation updates it optimistically first), backed by a best-effort
+ * server sync — every call below also fires the matching apps/api request
+ * and reconciles `lines` with its response once it lands. Failures are
+ * swallowed on purpose: a flaky network shouldn't block adding to cart, and
+ * the next successful call (or the next mount/login/logout, which
+ * re-hydrates from the server) corrects any drift.
+ *
+ * Known gap: `setQty`/`remove` send whatever `id` is currently in state. If
+ * called on a line added moments ago whose `add()` server round-trip hasn't
+ * resolved yet, that `id` is still the local optimistic key, not the real
+ * server item id — the call 404s server-side (swallowed) rather than
+ * applying, though local state still updates instantly. In practice this
+ * only matters for very rapid double-actions on a brand new line; not
+ * worth a request-queue for this phase.
+ */
 export function CartProvider({ children }: { children: ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [open, setOpen] = useState(false);
+  const { customer, isReady } = useAuth();
+
+  // Hydrate from the server on mount and whenever identity changes (login
+  // merges the guest cart server-side — see auth.service.ts — so re-fetching
+  // here picks up the merged result; logout switches back to whatever the
+  // browser's permanent guest session id owns).
+  useEffect(() => {
+    if (!isReady) return;
+    cartApi
+      .get()
+      .then((cart) => setLines(cart.items))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, customer?.id]);
 
   const add = useCallback((product: Product, weight?: string, qty = 1) => {
     const w = weight ?? product.weight;
@@ -54,6 +95,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       ];
     });
     setOpen(true);
+    cartApi
+      .addItem(product.id, w, qty)
+      .then((cart) => setLines(cart.items))
+      .catch(() => {});
   }, []);
 
   const setQty = useCallback((id: string, qty: number) => {
@@ -62,13 +107,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
         ? prev.filter((l) => l.id !== id)
         : prev.map((l) => (l.id === id ? { ...l, qty } : l)),
     );
+    cartApi
+      .updateItem(id, qty)
+      .then((cart) => setLines(cart.items))
+      .catch(() => {});
   }, []);
 
   const remove = useCallback((id: string) => {
     setLines((prev) => prev.filter((l) => l.id !== id));
+    cartApi.removeItem(id).catch(() => {});
   }, []);
 
-  const clear = useCallback(() => setLines([]), []);
+  const clear = useCallback(() => {
+    setLines([]);
+    cartApi.clear().catch(() => {});
+  }, []);
 
   const value = useMemo(() => {
     const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);

@@ -1,4 +1,5 @@
 import type { ApiResponse } from "@rajadhaniyam/shared";
+import { getGuestSessionId } from "@/lib/cartSession";
 
 const API_BASE_URL = import.meta.env["VITE_API_BASE_URL"] ?? "http://localhost:4000";
 
@@ -14,16 +15,23 @@ export class ApiError extends Error {
 
 type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown };
 
-/** Thin fetch wrapper for apps/api. */
-// Guarded — this module runs on the server too (SSR loaders), where
+// Both guarded — this module runs on the server too (SSR loaders), where
 // localStorage doesn't exist. Server-rendered requests are always
-// unauthenticated; see lib/auth.tsx's comment for why.
+// unauthenticated and cart-session-less; see lib/auth.tsx's comment for why.
 function authHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const token = localStorage.getItem("customer_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Sent on every request, not just /cart ones — harmless elsewhere, and
+// simpler than threading it through only the cart API calls.
+function cartSessionHeader(): Record<string, string> {
+  const id = getGuestSessionId();
+  return id ? { "X-Cart-Session": id } : {};
+}
+
+/** Thin fetch wrapper for apps/api. */
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
 
@@ -32,6 +40,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers: {
       "Content-Type": "application/json",
       ...authHeader(),
+      ...cartSessionHeader(),
       ...headers,
     },
     credentials: "include",

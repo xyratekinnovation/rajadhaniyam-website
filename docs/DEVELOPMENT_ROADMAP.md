@@ -163,15 +163,40 @@ migrations are finalized against a hosted database.
   ✅. Both verified in-browser end to end (not just via curl), including
   the redirect-when-logged-out behavior on both apps.
 
-## Phase 6 — Cart Synchronization
+## Phase 6 — Cart Synchronization ✅
 
 - **Objective:** Server-backed cart with guest + logged-in sync.
-- **Backend:** implement `apps/api/src/modules/cart` against `Cart`/`CartItem`.
-- **Frontend:** `src/lib/cart.tsx` gains an optional server-sync layer
-  (merge guest cart into user cart on login) without changing the
-  `useCart()` API surface components already use.
+- **Backend:** `apps/api/src/modules/cart` is real, against `Cart`/
+  `CartItem`. Works for both guests and logged-in customers off one
+  `optionalAuth` middleware (`apps/api/src/middleware/auth.ts`) — a valid
+  customer JWT identifies the cart by `userId`; otherwise a client-
+  generated `X-Cart-Session` header identifies it by `sessionId`. Adding a
+  product resolves `productSlug` + `weight` to the real `ProductVariant`
+  server-side, so the storefront never needs to know raw variant ids.
+  `/auth/register` and `/auth/login` read that same header and merge the
+  guest cart into the new/existing user's cart in one transaction
+  (summing quantities for shared variants), then discard the guest cart
+  row — see `cartService.mergeGuestCartIntoUser`.
+- **Frontend:** `src/lib/cart.tsx` keeps local React state as the source of
+  truth for instant UI feedback (unchanged `useCart()` surface — no
+  component was touched), backed by a best-effort sync layer: every
+  mutation updates local state optimistically *and* fires the matching
+  API call, reconciling `lines` with the server's response once it lands;
+  failures are swallowed since a flaky network shouldn't block adding to
+  cart. The cart re-hydrates from the server on mount and whenever the
+  logged-in identity changes (login/logout), which is what actually picks
+  up a just-merged cart after login. `src/lib/cartSession.ts` holds the
+  permanent per-browser guest session id (a `crypto.randomUUID()` in
+  `localStorage`, unrelated to and outliving any login session).
+  Documented known gap in `cart.tsx`: rapid actions on a line added
+  moments ago can race its still-in-flight `add()` server call, since
+  `setQty`/`remove` send whatever `id` is currently in state — not
+  worth a request-queue for this phase.
 - **Completion criteria:** cart persists across sessions/devices for a
-  logged-in user.
+  logged-in user. ✅ Verified in-browser (guest add → hard reload → still
+  there) and via direct database inspection for the merge-on-login path
+  (a second browser session's login correctly combined a new guest item
+  into an existing account's cart, matching quantities summed correctly).
 
 ## Phase 7 — Checkout + Address
 

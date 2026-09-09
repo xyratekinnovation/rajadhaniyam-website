@@ -1,12 +1,7 @@
 import { prisma } from "@rajadhaniyam/database";
 import type { Category, CategoryInput } from "@rajadhaniyam/shared";
-import { env } from "../../config/env";
 import { HttpError } from "../../middleware/errorHandler";
-
-// See products.service.ts's absoluteUrl comment — same placeholder-hosting situation.
-function absoluteUrl(path: string): string {
-  return /^https?:\/\//.test(path) ? path : `${env.STOREFRONT_URL}${path}`;
-}
+import { absoluteUrl } from "../../utils/images";
 
 function toCategory(row: {
   id: string;

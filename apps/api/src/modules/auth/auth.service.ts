@@ -2,6 +2,7 @@ import { prisma } from "@rajadhaniyam/database";
 import type { Address, Customer } from "@rajadhaniyam/shared";
 import { HttpError } from "../../middleware/errorHandler";
 import { signAdminToken, signCustomerToken } from "../../utils/jwt";
+import { cartService } from "../cart/cart.service";
 
 function toCustomer(row: {
   id: string;
@@ -48,7 +49,10 @@ function toAddress(row: {
 }
 
 export const authService = {
-  register: async (input: { email: string; password: string; name: string }) => {
+  register: async (
+    input: { email: string; password: string; name: string },
+    guestSessionId?: string,
+  ) => {
     const existing = await prisma.user.findUnique({ where: { email: input.email } });
     if (existing) throw new HttpError(409, "An account with this email already exists");
 
@@ -57,14 +61,18 @@ export const authService = {
       data: { email: input.email, passwordHash, name: input.name },
     });
 
+    if (guestSessionId) await cartService.mergeGuestCartIntoUser(guestSessionId, user.id);
+
     return { token: await signCustomerToken(user.id), customer: toCustomer(user) };
   },
 
-  login: async (input: { email: string; password: string }) => {
+  login: async (input: { email: string; password: string }, guestSessionId?: string) => {
     const user = await prisma.user.findUnique({ where: { email: input.email } });
     if (!user || !(await Bun.password.verify(input.password, user.passwordHash))) {
       throw new HttpError(401, "Invalid email or password");
     }
+
+    if (guestSessionId) await cartService.mergeGuestCartIntoUser(guestSessionId, user.id);
 
     return { token: await signCustomerToken(user.id), customer: toCustomer(user) };
   },
