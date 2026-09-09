@@ -10,6 +10,8 @@ const envSchema = z.object({
     .positive()
     .default(Number(process.env.PORT) || 4000),
   DATABASE_URL: z.string().optional(),
+  SUPABASE_URL: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   JWT_SECRET: z.string().default("dev-only-insecure-secret"),
   SESSION_SECRET: z.string().default("dev-only-insecure-secret"),
   STOREFRONT_URL: z.string().default("http://localhost:8080"),

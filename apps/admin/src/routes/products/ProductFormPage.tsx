@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { productInputSchema, type ProductInput, type ProductVariantInput } from "@rajadhaniyam/shared";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { FormField } from "@/components/form/FormField";
+import { ImageUploadButton } from "@/components/form/ImageUploadButton";
 import { LoadingState } from "@/components/states";
 import { productsApi } from "@/services/api/products";
 import { categoriesApi } from "@/services/api/categories";
@@ -319,28 +320,36 @@ export function ProductFormPage() {
             </button>
           </div>
           <p className="text-xs text-[var(--admin-muted)]">
-            Paste a hosted image URL, or a path already served from the storefront's{" "}
-            <code>/public</code> folder (e.g. <code>/assets/p-kambu.jpg</code>). Direct file upload
-            isn't wired up yet.
+            Upload a file (JPEG/PNG/WebP/GIF, max 5 MB) or paste an existing image URL.
           </p>
           {form.images.map((img, i) => (
-            <div key={i} className="flex gap-2">
-              <input
-                placeholder="https://... or /assets/..."
-                value={img}
-                onChange={(e) => updateImage(i, e.target.value)}
-                className="h-9 flex-1 rounded-md border border-[var(--admin-border)] bg-[var(--admin-surface)] px-2 text-sm outline-none focus:border-[var(--admin-primary)]"
-              />
-              <button
-                type="button"
-                disabled={form.images.length === 1}
-                onClick={() =>
-                  setForm((f) => ({ ...f, images: f.images.filter((_, idx) => idx !== i) }))
-                }
-                className="rounded-md p-2 text-[var(--admin-muted)] hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+            <div key={i} className="space-y-1.5">
+              {img ? (
+                <img
+                  src={img}
+                  alt=""
+                  className="h-16 w-16 rounded-md border border-[var(--admin-border)] object-cover"
+                />
+              ) : null}
+              <div className="flex gap-2">
+                <input
+                  placeholder="https://... or upload a file"
+                  value={img}
+                  onChange={(e) => updateImage(i, e.target.value)}
+                  className="h-9 flex-1 rounded-md border border-[var(--admin-border)] bg-[var(--admin-surface)] px-2 text-sm outline-none focus:border-[var(--admin-primary)]"
+                />
+                <ImageUploadButton onUploaded={(url) => updateImage(i, url)} />
+                <button
+                  type="button"
+                  disabled={form.images.length === 1}
+                  onClick={() =>
+                    setForm((f) => ({ ...f, images: f.images.filter((_, idx) => idx !== i) }))
+                  }
+                  className="rounded-md p-2 text-[var(--admin-muted)] hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

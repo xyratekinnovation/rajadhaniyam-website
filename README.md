@@ -107,6 +107,7 @@ file for the full list and comments; short version:
 | ------------------------------------------------- | ------------------------------- | --------------------------------------------------------- |
 | `DATABASE_URL`                                    | `packages/database`, `apps/api` | Supabase pooled connection string, needs `?pgbouncer=true` |
 | `DIRECT_URL`                                      | `packages/database`             | Supabase direct connection — `prisma migrate` only         |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`       | `apps/api`                      | Product/category image uploads — never expose as `VITE_*`  |
 | `JWT_SECRET`, `SESSION_SECRET`                    | `apps/api`                      | Server-only, generate real random values before deploying |
 | `API_PORT`                                        | `apps/api`                      | Defaults to `4000`                                        |
 | `STOREFRONT_URL`, `ADMIN_URL`                     | `apps/api`                      | Used for CORS allow-list                                  |

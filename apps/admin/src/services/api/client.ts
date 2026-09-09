@@ -48,3 +48,25 @@ export const apiPost = <T>(path: string, body?: unknown) =>
 export const apiPatch = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: "PATCH", body });
 export const apiDelete = <T>(path: string) => request<T>(path, { method: "DELETE" });
+
+// Separate from request() — a multipart body must NOT have a manually-set
+// Content-Type (the browser needs to add its own boundary parameter), and
+// must not be JSON.stringify'd.
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/admin${path}`, {
+    method: "POST",
+    headers: {
+      // See the comment on `request` above — same temporary placeholder.
+      Authorization: "Bearer dev-placeholder-token",
+    },
+    credentials: "include",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new ApiError(`Request to ${path} failed with ${response.status}`, response.status);
+  }
+
+  const payload = (await response.json()) as ApiResponse<T>;
+  return payload.data;
+}

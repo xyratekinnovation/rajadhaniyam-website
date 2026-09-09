@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { categoryInputSchema, type CategoryInput } from "@rajadhaniyam/shared";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { FormField } from "@/components/form/FormField";
+import { ImageUploadButton } from "@/components/form/ImageUploadButton";
 import { LoadingState } from "@/components/states";
 import { categoriesApi } from "@/services/api/categories";
 
@@ -117,13 +118,30 @@ export function CategoryFormPage() {
           />
         </FormField>
         <FormField
-          label="Image URL"
+          label="Image"
           htmlFor="image"
-          hint="Paste a hosted URL, or a /public path like /assets/cat-grains.jpg"
-          placeholder="/assets/cat-grains.jpg"
-          value={image}
-          onChange={(e) => setImage(e.target.value)}
-        />
+          hint="Upload a file (JPEG/PNG/WebP/GIF, max 5 MB) or paste an existing image URL."
+        >
+          <div className="space-y-1.5">
+            {image ? (
+              <img
+                src={image}
+                alt=""
+                className="h-16 w-16 rounded-md border border-[var(--admin-border)] object-cover"
+              />
+            ) : null}
+            <div className="flex gap-2">
+              <input
+                id="image"
+                placeholder="https://... or upload a file"
+                value={image}
+                onChange={(e) => setImage(e.target.value)}
+                className="h-10 flex-1 rounded-md border border-[var(--admin-border)] bg-[var(--admin-surface)] px-3 text-sm outline-none focus:border-[var(--admin-primary)]"
+              />
+              <ImageUploadButton onUploaded={setImage} />
+            </div>
+          </div>
+        </FormField>
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

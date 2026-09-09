@@ -22,6 +22,10 @@ services:
         value: production
       - key: DATABASE_URL
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: SESSION_SECRET

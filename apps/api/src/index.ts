@@ -7,6 +7,7 @@ import { productsRoutes } from "./modules/products/products.routes";
 import { productsAdminRoutes } from "./modules/products/products.admin.routes";
 import { categoriesRoutes } from "./modules/categories/categories.routes";
 import { categoriesAdminRoutes } from "./modules/categories/categories.admin.routes";
+import { uploadsRoutes } from "./modules/uploads/uploads.routes";
 import { customersRoutes } from "./modules/customers/customers.routes";
 import { cartRoutes } from "./modules/cart/cart.routes";
 import { ordersRoutes, checkoutRoutes } from "./modules/orders/orders.routes";
@@ -44,6 +45,7 @@ app.route("/content", contentRoutes);
 app.route("/admin/analytics", analyticsRoutes);
 app.route("/admin/products", productsAdminRoutes);
 app.route("/admin/categories", categoriesAdminRoutes);
+app.route("/admin/uploads", uploadsRoutes);
 
 app.notFound((c) => c.json({ success: false, message: "Not found" }, 404));
 

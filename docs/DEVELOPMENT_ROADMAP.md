@@ -72,7 +72,7 @@ migrations are finalized against a hosted database.
 - **Completion criteria:** storefront renders the same pages from the real
   API instead of `shop-data.ts`. ✅
 
-## Phase 4 — Admin Product Management ✅ (except real image upload)
+## Phase 4 — Admin Product Management ✅
 
 - **Objective:** Full CRUD UI for products, categories, images, variants.
 - **Backend:** `apps/api` gained `/admin/products` and `/admin/categories`
@@ -85,13 +85,14 @@ migrations are finalized against a hosted database.
   `CategoriesListPage`/`CategoryFormPage` are fully wired — variant editor
   (add/remove weight+price+mrp+stock rows), bestseller/featured toggles,
   status workflow, delete with confirmation, all via TanStack Query.
-- **Not done — image upload:** admin pastes an image URL (a hosted URL, or
-  a `/assets/...` path already served by the storefront's `public/`
-  folder) rather than uploading a file from their computer. Real upload
-  needs object storage (Supabase Storage was proposed, since it's already
-  part of the existing Supabase project) — **blocked on the user
-  providing Supabase Storage credentials** (service role key), not
-  attempted without them.
+- **Image upload:** real, via Supabase Storage. `apps/api`'s
+  `POST /admin/uploads` (see `apps/api/src/modules/uploads`) accepts a
+  multipart file (JPEG/PNG/WebP/GIF, max 5 MB), uploads it to the
+  `product-images` bucket via Supabase's Storage REST API directly (no
+  `@supabase/supabase-js` dependency needed for one upload endpoint), and
+  returns a public URL. `apps/admin`'s product/category forms have an
+  "Upload" button next to the image URL field wired to it. Bucket creation
+  is a one-time idempotent script: `bun run --cwd=apps/api setup-storage`.
 - **Known gap surfaced, not fixed here:** `requireAdminAuth` is still the
   Phase-1 foundation stub (checks a header is *present*, not that it's a
   *valid* admin session) — the admin app sends a hardcoded placeholder
