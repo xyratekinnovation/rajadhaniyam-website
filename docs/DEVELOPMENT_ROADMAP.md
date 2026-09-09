@@ -72,15 +72,44 @@ migrations are finalized against a hosted database.
 - **Completion criteria:** storefront renders the same pages from the real
   API instead of `shop-data.ts`. ✅
 
-## Phase 4 — Admin Product Management
+## Phase 4 — Admin Product Management ✅ (except real image upload)
 
 - **Objective:** Full CRUD UI for products, categories, images, variants.
-- **Admin:** image upload, variant editor, bestseller/featured toggles,
-  status workflow (draft → active → archived).
-- **Backend:** validation via `@rajadhaniyam/shared` Zod schemas, image
-  storage strategy (S3-compatible bucket or similar).
+- **Backend:** `apps/api` gained `/admin/products` and `/admin/categories`
+  (separate from the public `/products`/`/categories` read routes), with
+  full create/update/delete backed by Prisma and validated with new
+  `productInputSchema`/`categoryInputSchema` in `@rajadhaniyam/shared`.
+  Category deletion is blocked with a clear `409` if products still
+  reference it (FK constraint, not a raw DB error).
+- **Admin:** `ProductsListPage`/`ProductFormPage` and new
+  `CategoriesListPage`/`CategoryFormPage` are fully wired — variant editor
+  (add/remove weight+price+mrp+stock rows), bestseller/featured toggles,
+  status workflow, delete with confirmation, all via TanStack Query.
+- **Not done — image upload:** admin pastes an image URL (a hosted URL, or
+  a `/assets/...` path already served by the storefront's `public/`
+  folder) rather than uploading a file from their computer. Real upload
+  needs object storage (Supabase Storage was proposed, since it's already
+  part of the existing Supabase project) — **blocked on the user
+  providing Supabase Storage credentials** (service role key), not
+  attempted without them.
+- **Known gap surfaced, not fixed here:** `requireAdminAuth` is still the
+  Phase-1 foundation stub (checks a header is *present*, not that it's a
+  *valid* admin session) — the admin app sends a hardcoded placeholder
+  token (see `apps/admin/src/services/api/client.ts`) just so these routes
+  are reachable today. **Must be replaced with real auth (Phase 5) before
+  any production deploy** — right now anyone who finds the API URL can
+  call these mutation endpoints.
+- **Bug caught during manual testing:** the storefront's flattened
+  `Product` DTO collapses multiple variants into one price/mrp/stock,
+  which would have silently reset real per-variant stock to a placeholder
+  on every edit. Fixed by adding `ProductAdminDetail` (in
+  `@rajadhaniyam/shared`) with a real `variantsDetail` array for the edit
+  form to load from, instead of reconstructing lossy data.
 - **Completion criteria:** an admin can create a product end-to-end and see
-  it live on the storefront.
+  it live on the storefront. ✅ Verified in-browser: created a product via
+  the admin form, confirmed it appeared instantly on the public API,
+  edited it (verified real per-variant stock/price round-trips correctly
+  after the fix above), deleted it, and confirmed removal.
 
 ## Phase 5 — Customer & Admin Authentication
 

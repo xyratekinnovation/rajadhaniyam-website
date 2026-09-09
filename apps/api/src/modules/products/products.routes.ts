@@ -1,7 +1,9 @@
 import { Hono } from "hono";
-import { paginated, ok, notImplemented } from "../../utils/response";
+import { paginated, ok } from "../../utils/response";
 import { productsService } from "./products.service";
 
+// Public, read-only — admin mutations live in products.admin.routes.ts
+// (mounted at /admin/products) instead of here.
 export const productsRoutes = new Hono();
 
 productsRoutes.get("/", async (c) => {
@@ -16,8 +18,3 @@ productsRoutes.get("/:id", async (c) => {
   if (!product) return c.json({ success: false, message: "Product not found" }, 404);
   return c.json(ok(product));
 });
-
-// Admin-only mutations — wired to requireAdminAuth once implemented (Phase 4).
-productsRoutes.post("/", (c) => c.json(notImplemented("Product creation"), 501));
-productsRoutes.patch("/:id", (c) => c.json(notImplemented("Product update"), 501));
-productsRoutes.delete("/:id", (c) => c.json(notImplemented("Product deletion"), 501));

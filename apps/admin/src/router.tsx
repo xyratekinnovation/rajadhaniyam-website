@@ -3,7 +3,8 @@ import { LoginPage } from "./routes/login";
 import { DashboardPage } from "./routes/dashboard";
 import { ProductsListPage } from "./routes/products/ProductsListPage";
 import { ProductFormPage } from "./routes/products/ProductFormPage";
-import { CategoriesPage } from "./routes/categories";
+import { CategoriesListPage } from "./routes/categories/CategoriesListPage";
+import { CategoryFormPage } from "./routes/categories/CategoryFormPage";
 import { OrdersListPage } from "./routes/orders/OrdersListPage";
 import { OrderDetailPage } from "./routes/orders/OrderDetailPage";
 import { CustomersPage } from "./routes/customers";
@@ -46,7 +47,17 @@ const editProductRoute = createRoute({
 const categoriesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/categories",
-  component: CategoriesPage,
+  component: CategoriesListPage,
+});
+const newCategoryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/categories/new",
+  component: CategoryFormPage,
+});
+const editCategoryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/categories/$categoryId",
+  component: CategoryFormPage,
 });
 const ordersRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -96,6 +107,8 @@ const routeTree = rootRoute.addChildren([
   newProductRoute,
   editProductRoute,
   categoriesRoute,
+  newCategoryRoute,
+  editCategoryRoute,
   ordersRoute,
   orderDetailRoute,
   customersRoute,

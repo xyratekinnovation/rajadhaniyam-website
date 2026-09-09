@@ -46,6 +46,18 @@ export type ProductVariant = {
   active: boolean;
 };
 
+/**
+ * Admin-only detail view: the flattened `Product` DTO above collapses all
+ * variants down to one price/mrp/weight/inStock for the storefront's display
+ * needs, which loses real per-variant price/stock data. Editing a product
+ * from that flattened shape would silently reset every variant's real stock
+ * to a placeholder. `variantsDetail` carries the real per-variant data the
+ * admin edit form needs to round-trip correctly.
+ */
+export type ProductAdminDetail = Product & {
+  variantsDetail: Array<{ weight: string; price: number; mrp: number; stock: number }>;
+};
+
 export type Category = {
   id?: string;
   slug: string;

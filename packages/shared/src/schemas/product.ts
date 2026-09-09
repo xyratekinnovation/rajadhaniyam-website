@@ -42,3 +42,45 @@ export const productVariantSchema = z.object({
   stock: z.number().int().nonnegative(),
   active: z.boolean(),
 });
+
+// ---------- Admin write-input schemas (apps/api /admin/*, apps/admin forms) ----------
+// Shaped for creating/editing DB rows (categoryId + variants[]/images[]), unlike
+// productSchema/categorySchema above which validate the storefront's flattened
+// read DTO.
+
+export const productVariantInputSchema = z.object({
+  weight: z.string().min(1),
+  price: z.number().nonnegative(),
+  mrp: z.number().nonnegative(),
+  stock: z.number().int().nonnegative(),
+});
+
+export const productInputSchema = z.object({
+  name: z.string().min(1),
+  slug: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers and hyphens only"),
+  categoryId: z.string().min(1),
+  description: z.string().optional(),
+  ingredients: z.string().optional(),
+  status: z.enum(["draft", "active", "archived"]).default("draft"),
+  bestseller: z.boolean().default(false),
+  featured: z.boolean().default(false),
+  images: z.array(z.string().min(1)).default([]),
+  variants: z.array(productVariantInputSchema).min(1, "At least one weight/price variant is required"),
+});
+
+export const categoryInputSchema = z.object({
+  slug: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers and hyphens only"),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  image: z.string().optional(),
+});
+
+export type ProductInput = z.infer<typeof productInputSchema>;
+export type ProductVariantInput = z.infer<typeof productVariantInputSchema>;
+export type CategoryInput = z.infer<typeof categoryInputSchema>;

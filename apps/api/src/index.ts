@@ -4,7 +4,9 @@ import { env } from "./config/env";
 import { errorHandler } from "./middleware/errorHandler";
 import { authRoutes } from "./modules/auth/auth.routes";
 import { productsRoutes } from "./modules/products/products.routes";
+import { productsAdminRoutes } from "./modules/products/products.admin.routes";
 import { categoriesRoutes } from "./modules/categories/categories.routes";
+import { categoriesAdminRoutes } from "./modules/categories/categories.admin.routes";
 import { customersRoutes } from "./modules/customers/customers.routes";
 import { cartRoutes } from "./modules/cart/cart.routes";
 import { ordersRoutes, checkoutRoutes } from "./modules/orders/orders.routes";
@@ -40,6 +42,8 @@ app.route("/payments", paymentsRoutes);
 app.route("/coupons", couponsRoutes);
 app.route("/content", contentRoutes);
 app.route("/admin/analytics", analyticsRoutes);
+app.route("/admin/products", productsAdminRoutes);
+app.route("/admin/categories", categoriesAdminRoutes);
 
 app.notFound((c) => c.json({ success: false, message: "Not found" }, 404));
 

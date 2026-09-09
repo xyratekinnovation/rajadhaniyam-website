@@ -1,5 +1,10 @@
 import { prisma } from "@rajadhaniyam/database";
-import type { Product, ProductNutritionFact } from "@rajadhaniyam/shared";
+import type {
+  Product,
+  ProductAdminDetail,
+  ProductInput,
+  ProductNutritionFact,
+} from "@rajadhaniyam/shared";
 import { env } from "../../config/env";
 
 const include = {
@@ -20,11 +25,17 @@ function findOne(where: { slug: string }) {
 }
 
 // Absolute so the response works the same regardless of which app (storefront,
-// admin) requests it — stored paths are relative (see prisma/seed.ts) because
-// there's no real image hosting yet (Phase 4); this just resolves them against
-// the one app that currently serves them as static files.
+// admin) requests it. Seeded rows store relative paths (see prisma/seed.ts)
+// because there's no real image hosting yet — this resolves those against the
+// one app that currently serves them as static files. Admin-entered URLs may
+// already be absolute (a real hosted image), so only relative paths get
+// prefixed — otherwise this would mangle a real URL into garbage.
 function absoluteUrl(path: string): string {
-  return `${env.STOREFRONT_URL}${path}`;
+  return /^https?:\/\//.test(path) ? path : `${env.STOREFRONT_URL}${path}`;
+}
+
+function variantSku(productSlug: string, weight: string): string {
+  return `${productSlug}-${weight.replace(/\s+/g, "").toLowerCase()}`;
 }
 
 // The DTO's `id` is deliberately the human-readable slug, not the DB cuid —
@@ -78,8 +89,105 @@ export const productsService = {
     return rows.map(toProduct);
   },
 
+  // Public-facing: only ever returns a shopper-visible (ACTIVE) product.
   getById: async (slug: string): Promise<Product | undefined> => {
     const row = await findOne({ slug });
-    return row ? toProduct(row) : undefined;
+    return row && row.status === "ACTIVE" ? toProduct(row) : undefined;
+  },
+
+  // ---------- Admin (all statuses; keyed by slug, same identifier the
+  // public API and DTO already use — there's no separate "admin id" to track) ----------
+
+  listAdmin: async (): Promise<Product[]> => {
+    const rows = await prisma.product.findMany({ include, orderBy: { createdAt: "desc" } });
+    return rows.map(toProduct);
+  },
+
+  getBySlugAdmin: async (slug: string): Promise<ProductAdminDetail | undefined> => {
+    const row = await findOne({ slug });
+    if (!row) return undefined;
+    return {
+      ...toProduct(row),
+      variantsDetail: row.variants.map((v) => ({
+        weight: v.weight,
+        price: Number(v.price),
+        mrp: Number(v.mrp),
+        stock: v.stock,
+      })),
+    };
+  },
+
+  create: async (input: ProductInput): Promise<Product> => {
+    const row = await prisma.product.create({
+      data: {
+        slug: input.slug,
+        name: input.name,
+        description: input.description,
+        ingredients: input.ingredients,
+        categoryId: input.categoryId,
+        status: input.status.toUpperCase() as "DRAFT" | "ACTIVE" | "ARCHIVED",
+        bestseller: input.bestseller,
+        featured: input.featured,
+        images: { create: input.images.map((url, position) => ({ url, position })) },
+        variants: {
+          create: input.variants.map((v) => ({
+            sku: variantSku(input.slug, v.weight),
+            weight: v.weight,
+            price: v.price,
+            mrp: v.mrp,
+            stock: v.stock,
+            inventory: { create: { quantity: v.stock } },
+          })),
+        },
+      },
+      include,
+    });
+    return toProduct(row);
+  },
+
+  // Replaces variants/images wholesale via nested deleteMany+create in one
+  // query — the admin form always submits the full desired state (not a
+  // diff), so this is simpler and equally correct. Variant ids/skus change
+  // on every save; nothing external references them yet (cart/order line
+  // items are Phase 6/7 work). `currentSlug` is the lookup key; `input.slug`
+  // may rename it in the same call — Prisma allows a unique column to be
+  // both the WHERE and part of the SET.
+  update: async (currentSlug: string, input: ProductInput): Promise<Product> => {
+    const row = await prisma.product.update({
+      where: { slug: currentSlug },
+      data: {
+        slug: input.slug,
+        name: input.name,
+        description: input.description,
+        ingredients: input.ingredients,
+        categoryId: input.categoryId,
+        status: input.status.toUpperCase() as "DRAFT" | "ACTIVE" | "ARCHIVED",
+        bestseller: input.bestseller,
+        featured: input.featured,
+        images: {
+          deleteMany: {},
+          create: input.images.map((url, position) => ({ url, position })),
+        },
+        variants: {
+          deleteMany: {},
+          create: input.variants.map((v) => ({
+            sku: variantSku(input.slug, v.weight),
+            weight: v.weight,
+            price: v.price,
+            mrp: v.mrp,
+            stock: v.stock,
+            inventory: { create: { quantity: v.stock } },
+          })),
+        },
+      },
+      include,
+    });
+    return toProduct(row);
+  },
+
+  remove: async (slug: string): Promise<void> => {
+    // ProductVariant/ProductImage/Review rows cascade via the schema's
+    // onDelete: Cascade — see packages/database/prisma/schema.prisma.
+    await prisma.product.delete({ where: { slug } });
   },
 };

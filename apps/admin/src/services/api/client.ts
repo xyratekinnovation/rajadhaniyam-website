@@ -21,6 +21,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     ...rest,
     headers: {
       "Content-Type": "application/json",
+      // PHASE 5 TODO: requireAdminAuth (apps/api/src/middleware/auth.ts) is
+      // still foundation-only — it just checks a header is present, not that
+      // it's a real, verified admin session. This placeholder satisfies that
+      // check so Phase 4's admin CRUD is testable end-to-end today. It is
+      // NOT real security — anyone can call these endpoints. Must be replaced
+      // with a real login-issued token before any production deploy.
+      Authorization: "Bearer dev-placeholder-token",
       ...headers,
     },
     credentials: "include",

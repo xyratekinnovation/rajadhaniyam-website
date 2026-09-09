@@ -142,16 +142,18 @@ local `.env` — never committed).
 - **Checkout** — the form UI is real; submitting still just clears the
   local cart and navigates to `/order-success`, no order is created yet
   (Phase 7).
-- **`apps/api`** — `products` and `categories` are real (Prisma-backed
-  reads; create/update/delete are still `501` stubs, Phase 4). Every other
-  module (`auth`, `customers`, `cart`, `orders`, `inventory`, `payments`,
-  `coupons`, `content`, `analytics`) is still scaffolded with real route
-  shapes and Zod validation but no business logic yet.
-- **`apps/admin`** — every planned page exists and is reachable
-  (Dashboard, Products, Add/Edit Product, Categories, Orders, Order
-  Detail, Customers, Inventory, Coupons, Banners, Content, Settings,
-  Login) with layout, sidebar, table/form/state foundations — no page is
-  wired to real data yet (Phase 4).
+- **`apps/api`** — `products` and `categories` are real, including admin
+  create/update/delete under `/admin/products`/`/admin/categories`
+  (Phase 4). Every other module (`auth`, `customers`, `cart`, `orders`,
+  `inventory`, `payments`, `coupons`, `content`, `analytics`) is still
+  scaffolded with real route shapes and Zod validation but no business
+  logic yet. **`/admin/*` routes are not really protected yet** — real
+  auth is Phase 5; see the roadmap's Phase 4 entry.
+- **`apps/admin`** — Products and Categories (list/add/edit/delete) are
+  real, backed by `apps/api`. Every other planned page (Dashboard, Orders,
+  Order Detail, Customers, Inventory, Coupons, Banners, Content, Settings,
+  Login) exists and is reachable with layout/table/form foundations, but
+  isn't wired to real data yet.
 - **`packages/database`** — real Supabase database, schema migrated and
   seeded (5 categories, 10 products, 18 variants) — see
   [`packages/database/README.md`](packages/database/README.md).
