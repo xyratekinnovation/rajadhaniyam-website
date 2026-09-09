@@ -1,8 +1,10 @@
 // Rajadhaniyam — database schema (preparation only)
 // This schema is NOT yet migrated against a real database.
-// Once DATABASE_URL points at a real Postgres instance, run:
-//   bunx prisma generate
-//   bunx prisma migrate dev --name init
+// Once DATABASE_URL points at a real Postgres instance, run (from repo root):
+//   bun run --cwd=packages/database generate
+//   bun run --cwd=packages/database migrate:dev -- --name init
+// (`bunx prisma ...` resolves an unrelated package from the registry instead
+// of this repo's pinned devDependency — use the workspace scripts instead.)
 
 generator client {
   provider = "prisma-client-js"

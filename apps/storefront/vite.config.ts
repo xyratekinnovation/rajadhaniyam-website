@@ -12,4 +12,9 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Deploying to Render (a persistent Node/Bun process), not Cloudflare —
+  // pin Nitro's output to a plain Node server instead of the cloudflare-module default.
+  nitro: {
+    preset: "node-server",
+  },
 });

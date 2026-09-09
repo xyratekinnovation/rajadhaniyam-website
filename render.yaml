@@ -1,0 +1,66 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Bun has no native Render runtime, so the API and storefront deploy as
+# `docker` services (see their Dockerfiles) built from the repo root so
+# `bun install` can resolve this monorepo's `workspace:*` packages. The admin
+# is a static build, so its build step installs Bun itself via the official
+# install script instead.
+#
+# After the first Blueprint deploy, go to each service's Environment tab and
+# fill in the secrets marked `sync: false` below (never committed to git).
+
+services:
+  - type: web
+    name: rajadhaniyam-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: STOREFRONT_URL
+        value: https://rajadhaniyam-storefront.onrender.com
+      - key: ADMIN_URL
+        value: https://rajadhaniyam-admin.onrender.com
+      - key: PAYMENT_PROVIDER_KEY
+        sync: false
+      - key: PAYMENT_PROVIDER_SECRET
+        sync: false
+
+  - type: web
+    name: rajadhaniyam-storefront
+    runtime: docker
+    dockerfilePath: ./apps/storefront/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: VITE_API_BASE_URL
+        value: https://rajadhaniyam-api.onrender.com
+      - key: VITE_ADMIN_URL
+        value: https://rajadhaniyam-admin.onrender.com
+
+  - type: web
+    name: rajadhaniyam-admin
+    runtime: static
+    buildCommand: >-
+      curl -fsSL https://bun.sh/install | bash &&
+      export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH" &&
+      bun install --frozen-lockfile && bun run --cwd=apps/admin build
+    staticPublishPath: ./apps/admin/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://rajadhaniyam-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

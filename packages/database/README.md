@@ -14,8 +14,11 @@ See [`prisma/schema.prisma`](./prisma/schema.prisma) for the full schema.
 
 ## Getting started (next phase)
 
-1. Provision a PostgreSQL database and set `DATABASE_URL` in `.env` at the
-   repo root (copy from `.env.example`).
+1. Provision a PostgreSQL database — this project uses **Supabase**
+   (Project Settings → Database → connection string, "Transaction" pooler
+   mode) — and set `DATABASE_URL` in `.env` at the repo root (copy from
+   `.env.example`). Also set the same value on the `rajadhaniyam-api`
+   service in Render (see [`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md)).
 2. From this directory (or via the root workspace):
    ```bash
    bun run generate      # prisma generate

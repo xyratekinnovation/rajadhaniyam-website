@@ -29,7 +29,7 @@ migrations are finalized against a hosted database.
   in `packages/database/prisma/schema.prisma`.
 - **Backend:** wire `packages/database`'s `prisma` client into `apps/api`.
 - **Database:** provision Postgres (local Docker or hosted), set
-  `DATABASE_URL`, run `bunx prisma migrate dev --name init`, seed initial
+  `DATABASE_URL`, run `bun run --cwd=packages/database migrate:dev -- --name init`, seed initial
   categories/products from `shop-data.ts` as a one-time migration script.
 - **Completion criteria:** `apps/api` can read/write through Prisma against
   a real database in development.
