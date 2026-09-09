@@ -147,6 +147,25 @@ export const cartService = {
 
     await prisma.cart.delete({ where: { id: guestCart.id } });
   },
+
+  // Internal — used by orders.service.ts's checkout flow, which needs
+  // variantId/current stock that the public Cart DTO (toCart, above)
+  // deliberately doesn't expose.
+  getRawForCheckout: async (identity: CartIdentity) => {
+    const row = await findRow(identity);
+    if (!row || row.items.length === 0) return null;
+    return {
+      cartId: row.id,
+      items: row.items.map((item) => ({
+        variantId: item.variantId,
+        productName: item.variant.product.name,
+        variantWeight: item.variant.weight,
+        price: Number(item.variant.price),
+        qty: item.qty,
+        stock: item.variant.stock,
+      })),
+    };
+  },
 };
 
 async function assertOwnsItem(identity: CartIdentity, itemId: string): Promise<void> {

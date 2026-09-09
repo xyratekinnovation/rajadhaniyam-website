@@ -49,6 +49,17 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const response = await fetch(`${API_BASE_URL}${path}`, init);
 
+  // A 401 on an authenticated call means the stored token is stale (expired,
+  // or the account behind it no longer exists — see the matching comment in
+  // apps/api/src/middleware/auth.ts). Clearing it here means the next
+  // request/page load correctly treats the visitor as logged out (and, for
+  // guest-friendly routes like /cart, retries as a guest via the session
+  // header, which is always sent) instead of repeating the same 401 forever.
+  if (response.status === 401 && typeof window !== "undefined" && authHeader()["Authorization"]) {
+    localStorage.removeItem("customer_token");
+    localStorage.removeItem("customer");
+  }
+
   if (!response.ok) {
     throw new ApiError(`Request to ${path} failed with ${response.status}`, response.status);
   }

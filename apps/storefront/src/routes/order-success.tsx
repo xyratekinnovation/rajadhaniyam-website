@@ -3,7 +3,14 @@ import { Check } from "lucide-react";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { BtnLink, Divider, Eyebrow } from "@/components/site/ui";
 
+type Search = { orderNumber?: string };
+
 export const Route = createFileRoute("/order-success")({
+  validateSearch: (search: Record<string, unknown>): Search => {
+    const result: Search = {};
+    if (typeof search["orderNumber"] === "string") result.orderNumber = search["orderNumber"];
+    return result;
+  },
   head: () => ({
     meta: [
       { title: "Order Confirmed — Rajadhaniyam" },
@@ -20,6 +27,8 @@ export const Route = createFileRoute("/order-success")({
 });
 
 function OrderSuccess() {
+  const { orderNumber } = Route.useSearch();
+
   return (
     <SiteLayout>
       <section className="mx-auto max-w-2xl px-6 py-24 text-center">
@@ -29,7 +38,14 @@ function OrderSuccess() {
         <Eyebrow className="mt-8 justify-center">Step 3 of 3</Eyebrow>
         <h1 className="mt-4 font-display text-5xl">Thank you for your order</h1>
         <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-          Order <span className="text-charcoal">#RJD-24817</span> is confirmed. We will send
+          {orderNumber ? (
+            <>
+              Order <span className="text-charcoal">#{orderNumber}</span> is confirmed.
+            </>
+          ) : (
+            "Your order is confirmed."
+          )}{" "}
+          Since this order is Cash on Delivery, please keep the exact amount ready — we'll send
           tracking details to your email as soon as it leaves our Coimbatore packhouse.
         </p>
         <Divider className="my-10" />

@@ -224,6 +224,16 @@ model Order {
   orderNumber   String        @unique
   userId        String?
   user          User?         @relation(fields: [userId], references: [id])
+  email         String
+  // Address.userId is required (addresses only exist for registered users),
+  // so a guest checkout has nowhere to attach a saved address. A snapshot
+  // taken at order time also happens to be the correct design regardless —
+  // a customer's saved Address can change or be deleted later, but the
+  // order must keep showing the address it actually shipped to. Shape
+  // mirrors the Address type (fullName/phone/line1.../country) minus
+  // id/isDefault. shippingAddressId is kept for a future "reorder"-style
+  // link to a saved address but is not written to in Phase 7.
+  shippingSnapshot   Json
   shippingAddressId String?
   shippingAddress    Address? @relation(fields: [shippingAddressId], references: [id])
   items         OrderItem[]

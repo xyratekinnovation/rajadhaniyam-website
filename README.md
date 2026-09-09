@@ -147,18 +147,22 @@ local `.env` — never committed).
   cart (`apps/api`'s `/cart`) for both guests (a persistent per-browser
   session id) and logged-in customers, merged automatically on
   login/register.
-- **Checkout** — the form UI is real; submitting still just clears the
-  local cart and navigates to `/order-success`, no order is created yet
-  (Phase 7).
+- **Checkout** — real, Cash on Delivery only. Submitting creates a real
+  `Order` (with a real order number shown on `/order-success`), decrements
+  stock, and clears the cart. Online payment (UPI/Card/Netbanking) is
+  visibly disabled ("Coming soon") — Razorpay integration is Phase 9,
+  blocked on the client's Razorpay account approval.
 - **`apps/api`** — `products` and `categories` are real, including admin
   create/update/delete under `/admin/products`/`/admin/categories`
   (Phase 4), now actually protected by real JWT verification (Phase 5).
   `auth` is real: register/login (customer + separate admin credential
   set), `/auth/me`, full address CRUD. `cart` is real (Phase 6, guest +
-  logged-in sync). Every other module (`customers`, `orders`,
-  `inventory`, `payments`, `coupons`, `content`, `analytics`) is still
-  scaffolded with real route shapes and Zod validation but no business
-  logic yet.
+  logged-in sync). `checkout`/`orders` are real for Cash on Delivery
+  (Phase 7) — customer order history and admin order management read the
+  same real data, but the admin `OrdersListPage`/`OrderDetailPage` aren't
+  wired to it yet (Phase 8). Every other module (`customers`, `inventory`,
+  `payments`, `coupons`, `content`, `analytics`) is still scaffolded with
+  real route shapes and Zod validation but no business logic yet.
 - **`apps/admin`** — Products and Categories (list/add/edit/delete) are
   real, backed by `apps/api`. Every other planned page (Dashboard, Orders,
   Order Detail, Customers, Inventory, Coupons, Banners, Content, Settings,

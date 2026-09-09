@@ -198,16 +198,61 @@ migrations are finalized against a hosted database.
   (a second browser session's login correctly combined a new guest item
   into an existing account's cart, matching quantities summed correctly).
 
-## Phase 7 — Checkout + Address
+## Phase 7 — Checkout + Address ✅ (Cash on Delivery only — see Phase 9)
 
 - **Objective:** Real checkout: address selection, shipping calc, coupon
   application, inventory validation, order creation.
-- **Backend:** `checkout` route creates an `Order` + `OrderItem`s
-  transactionally, decrements `Inventory`.
+- **Payment methods:** only `cod` is accepted — the client hasn't finished
+  Razorpay account approval (pending ~24h at time of writing), so online
+  payment (`upi`/`card`/`netbanking`) is rejected server-side with a clear
+  `503` rather than creating an order that could never actually be paid
+  for. The storefront's payment step shows those options as visibly
+  disabled ("Coming soon") rather than hiding them, so it's clear this is
+  temporary. Wiring Razorpay in alongside COD (not replacing it) is
+  Phase 9's job once credentials arrive.
+- **Coupons:** rejected with a clear `400` ("Coupons aren't available
+  yet") if `couponCode` is provided, rather than silently ignoring it —
+  Phase 11's job.
+- **Backend:** `POST /checkout` (`apps/api/src/modules/orders/orders.service.ts`)
+  works for guests and logged-in customers (same identity resolution as
+  the cart — extracted into `utils/cartIdentity.ts` since both needed it).
+  Validates stock against each item's live `ProductVariant.stock`,
+  computes subtotal/shipping/COD surcharge/total, and — inside one
+  transaction — creates the `Order` + `OrderItem`s + a `Payment` row
+  (`provider: "cod"`, `status: PENDING`), decrements
+  `ProductVariant.stock` (mirroring into `Inventory.quantity` too, even
+  though that table isn't the active source of truth until Phase 10's
+  reservation system), and clears the cart.
+- **Schema change:** added `Order.email` and `Order.shippingSnapshot`
+  (migration `add_order_email_shipping_snapshot`). `Address.userId` is
+  required, so a guest checkout has nowhere to attach a saved address —
+  and a snapshot taken at order time is the more correct design anyway,
+  regardless of guest/logged-in, since a saved address can change or be
+  deleted after the order ships. `shippingAddressId` is kept on the model
+  for a future "reorder" link to a saved address but isn't written to yet.
+- **Bug found and fixed during testing, not by design:** a JWT stays
+  cryptographically valid after the account behind it is deleted (no
+  server-side revocation list) — surfaced as a `500` (foreign key
+  violation) the first time a stale customer token tried to create a
+  cart. Fixed by having `requireAuth`/`optionalAuth`/`requireAdminAuth`
+  confirm the referenced account still exists, not just that the
+  signature checks out (`apps/api/src/middleware/auth.ts`). This will
+  happen for real (an admin deleting a customer while they're logged in),
+  not just during development cleanup — worth knowing about for any
+  future auth work.
 - **Frontend:** `routes/checkout.tsx` submits to `checkoutApi.createOrder`
-  instead of only clearing local cart state.
+  for real, prefills contact info from a logged-in customer, and shows
+  the real API error message on failure (out-of-stock, empty cart, etc.)
+  instead of always succeeding. `routes/order-success.tsx` reads the real
+  order number from a `?orderNumber=` search param instead of a
+  hardcoded one.
 - **Completion criteria:** placing an order creates a real `Order` row and
-  redirects to `/order-success` with a real order number.
+  redirects to `/order-success` with a real order number. ✅ Verified
+  fully in-browser: added a real product to a guest cart, completed
+  checkout with real form input, landed on the confirmation page showing
+  the actual generated order number, and confirmed in the database that
+  the `Order`/`OrderItem`/`Payment` rows, the shipping snapshot, and the
+  stock decrement were all exactly correct.
 
 ## Phase 8 — Orders
 
@@ -220,10 +265,17 @@ migrations are finalized against a hosted database.
 
 ## Phase 9 — Payment Gateway
 
-- **Objective:** Integrate a real Indian payment provider (Razorpay/Cashfree
-  or similar).
+- **Objective:** Integrate Razorpay (client's account, pending approval as
+  of Phase 7) as a real payment provider, **alongside** Cash on Delivery
+  — not replacing it. Blocked on the client providing API credentials
+  once their account is approved.
 - **Backend:** `apps/api/src/modules/payments` implements intent creation
-  and webhook verification, updates `Payment`/`Order.paymentStatus`.
+  and webhook verification, updates `Payment`/`Order.paymentStatus`. In
+  `orders.service.ts`, remove the "only `cod` is accepted" guard added in
+  Phase 7 (search for the comment referencing this phase) once Razorpay
+  intent creation exists for the other payment methods.
+- **Frontend:** re-enable the disabled "Coming soon" UPI/Card/Netbanking
+  options in `routes/checkout.tsx`'s `PAYMENT_OPTIONS`.
 - **Completion criteria:** a test payment completes end-to-end in sandbox
   mode.
 

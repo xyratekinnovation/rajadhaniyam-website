@@ -27,3 +27,5 @@ export const checkoutSchema = z.object({
 export const couponCodeSchema = z.object({
   code: z.string().min(1),
 });
+
+export type CheckoutInput = z.infer<typeof checkoutSchema>;
