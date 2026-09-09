@@ -200,12 +200,31 @@ export const ordersService = {
     return row ? toOrder(row) : undefined;
   },
 
+  // Releases stock (Phase 10) when an order moves INTO cancelled from
+  // something else — guarded so re-saving an already-cancelled order (or
+  // any other transition) can't release the same stock twice.
   updateStatus: async (id: string, status: Order["status"]): Promise<Order> => {
-    const row = await prisma.order.update({
-      where: { id },
-      data: { status: status.toUpperCase() as PrismaOrderStatus },
-      include,
+    const newStatus = status.toUpperCase() as PrismaOrderStatus;
+
+    const row = await prisma.$transaction(async (tx) => {
+      const existing = await tx.order.findUniqueOrThrow({ where: { id }, include: { items: true } });
+
+      if (newStatus === "CANCELLED" && existing.status !== "CANCELLED") {
+        for (const item of existing.items) {
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: { stock: { increment: item.qty } },
+          });
+          await tx.inventory.updateMany({
+            where: { variantId: item.variantId },
+            data: { quantity: { increment: item.qty } },
+          });
+        }
+      }
+
+      return tx.order.update({ where: { id }, data: { status: newStatus }, include });
     });
+
     return toOrder(row);
   },
 };

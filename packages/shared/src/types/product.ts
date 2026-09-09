@@ -58,6 +58,17 @@ export type ProductAdminDetail = Product & {
   variantsDetail: Array<{ weight: string; price: number; mrp: number; stock: number }>;
 };
 
+/** Admin inventory table row — one per ProductVariant. */
+export type InventoryItem = {
+  variantId: string;
+  productName: string;
+  productSlug: string;
+  sku: string;
+  weight: string;
+  stock: number;
+  lowStock: boolean;
+};
+
 export type Category = {
   id?: string;
   slug: string;

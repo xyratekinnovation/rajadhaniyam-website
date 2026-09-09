@@ -1,6 +1,7 @@
 export const FREE_SHIPPING_THRESHOLD = 499;
 export const STANDARD_SHIPPING_FEE = 49;
 export const COD_SURCHARGE = 25;
+export const LOW_STOCK_THRESHOLD = 10;
 
 export const ORDER_STATUS = {
   PENDING: "pending",

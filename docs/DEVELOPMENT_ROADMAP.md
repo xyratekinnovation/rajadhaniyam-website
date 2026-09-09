@@ -304,12 +304,32 @@ migrations are finalized against a hosted database.
 - **Completion criteria:** a test payment completes end-to-end in sandbox
   mode.
 
-## Phase 10 — Inventory
+## Phase 10 — Inventory ✅
 
 - **Objective:** Real stock tracking per `ProductVariant`.
-- **Backend:** `Inventory` reservations on checkout, release on cancel.
-- **Admin:** low-stock indicators, manual stock adjustment.
-- **Completion criteria:** out-of-stock variants can't be checked out.
+- **Backend:** "reservation on checkout" is effectively what Phase 7
+  already does — COD orders have no separate payment-pending state to
+  wait through, so decrementing `ProductVariant.stock` immediately at
+  order creation *is* the commit. What Phase 10 adds: `orders.service.ts`
+  `updateStatus` now **releases stock** (restores each item's qty) when
+  an order transitions into `cancelled` from anything else, inside the
+  same transaction as the status change — guarded so re-saving an
+  already-cancelled order can't double-release. New
+  `apps/api/src/modules/inventory` (mounted at `/admin/inventory`, moved
+  off the old inconsistent bare `/inventory`): `GET /` lists every
+  variant with a computed `lowStock` flag (`LOW_STOCK_THRESHOLD = 10` in
+  `@rajadhaniyam/shared`), `PATCH /:variantId` sets an absolute stock
+  count (not a delta — simpler, less surprising for an admin typing a
+  number in).
+- **Admin:** `InventoryPage` lists every variant sorted lowest-stock-first,
+  with an inline-editable stock field (blur or Enter commits) and a "Low
+  stock" badge.
+- **Completion criteria:** out-of-stock variants can't be checked out —
+  already true since Phase 7's stock check in `createOrder`; re-verified
+  still correct here. Also verified: cancelling a real order via the admin
+  UI restores the exact quantity to the variant's stock (and its
+  `Inventory.quantity` mirror), and cancelling it again doesn't
+  double-release.
 
 ## Phase 11 — Coupons
 

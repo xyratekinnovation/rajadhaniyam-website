@@ -39,7 +39,7 @@ app.route("/customers", customersRoutes);
 app.route("/cart", cartRoutes);
 app.route("/orders", ordersRoutes);
 app.route("/checkout", checkoutRoutes);
-app.route("/inventory", inventoryRoutes);
+app.route("/admin/inventory", inventoryRoutes);
 app.route("/payments", paymentsRoutes);
 app.route("/coupons", couponsRoutes);
 app.route("/content", contentRoutes);
