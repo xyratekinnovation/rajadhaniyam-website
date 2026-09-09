@@ -17,6 +17,7 @@ import { paymentsRoutes } from "./modules/payments/payments.routes";
 import { couponsRoutes } from "./modules/coupons/coupons.routes";
 import { couponsAdminRoutes } from "./modules/coupons/coupons.admin.routes";
 import { contentRoutes } from "./modules/content/content.routes";
+import { contentAdminRoutes, bannersAdminRoutes } from "./modules/content/content.admin.routes";
 import { analyticsRoutes } from "./modules/analytics/analytics.routes";
 
 const app = new Hono();
@@ -50,6 +51,8 @@ app.route("/admin/categories", categoriesAdminRoutes);
 app.route("/admin/uploads", uploadsRoutes);
 app.route("/admin/orders", ordersAdminRoutes);
 app.route("/admin/coupons", couponsAdminRoutes);
+app.route("/admin/content", contentAdminRoutes);
+app.route("/admin/banners", bannersAdminRoutes);
 
 app.notFound((c) => c.json({ success: false, message: "Not found" }, 404));
 

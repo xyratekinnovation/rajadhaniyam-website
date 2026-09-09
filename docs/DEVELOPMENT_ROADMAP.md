@@ -359,15 +359,34 @@ migrations are finalized against a hosted database.
   database that the stored discount/total matched exactly (₹95 subtotal →
   ₹14.25 discount → ₹154.75 total, including the COD surcharge).
 
-## Phase 12 — CMS / Banner Management
+## Phase 12 — CMS / Banner Management ✅
 
 - **Objective:** Editable homepage content without a code deploy.
-- **Backend:** `Banner` CRUD, simple content-block storage.
-- **Admin:** `BannersPage`/`ContentPage` become real editors.
-- **Frontend:** homepage hero/category sections read from the content API
-  with the current hardcoded copy as a fallback.
+- **Backend:** `Banner` CRUD is real, at `/admin/banners` (public read at
+  `GET /content/banners`, active-only — filtered by `active` and an
+  optional `startsAt`/`endsAt` date window). New `SiteContent` model
+  (migration `add_site_content`) is the "simple content-block storage" —
+  a generic `{ key, value: Json }` table, one row per editable section
+  (today: `homepage_hero`), so adding another editable section later is
+  an API/admin-form change, not a migration. `GET /content/hero` returns
+  `null` (not a 404) when no override has been saved — an expected,
+  normal state, not an error.
+- **Admin:** `ContentPage` is a real hero editor (pre-filled from the
+  current hardcoded copy when nothing's been saved yet, so editing feels
+  like "tweak the current hero" rather than "fill in a blank form").
+  `BannersPage` is real list/add/edit/delete, single-page form like
+  Coupons.
+- **Frontend:** homepage hero reads from `GET /content/hero`, falling back
+  to the hardcoded `DEFAULT_HERO` (kept in sync with the admin form's own
+  default) when nothing's saved. A slim promo strip shows the
+  highest-priority active banner, if any — category sections were **not**
+  touched here since they already read from the real Category API since
+  Phase 3/4, nothing new needed there.
 - **Completion criteria:** an admin can change the homepage hero image/copy
-  without a deploy.
+  without a deploy. ✅ Verified fully in-browser: saved a hero override
+  and created banners (one active, one inactive) through the real admin
+  UI, confirmed the homepage immediately showed the new hero copy and
+  only the active banner — no deploy, no restart.
 
 ## Phase 13 — Analytics
 

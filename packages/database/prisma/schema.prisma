@@ -339,3 +339,15 @@ model ContactEnquiry {
 
   @@map("contact_enquiries")
 }
+
+// Generic key-value content storage — Phase 12's "simple content-block
+// storage". One row per editable homepage section (today: "homepage_hero"),
+// value shape is section-specific and interpreted by the API layer, not
+// the schema — adding a new editable section later doesn't need a migration.
+model SiteContent {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("site_content")
+}

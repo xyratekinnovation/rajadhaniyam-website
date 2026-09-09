@@ -1,19 +1,38 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Leaf, Sprout, ShieldCheck, Truck } from "lucide-react";
+import type { HomepageHero } from "@rajadhaniyam/shared";
 import heroImg from "@/assets/hero-grains.jpg";
 import storyImg from "@/assets/story-hands.jpg";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { ProductCard } from "@/components/site/ProductCard";
 import { BtnLink, Divider, Eyebrow, GrainOrnament, SectionHeading } from "@/components/site/ui";
 import { productService, categoryService } from "@/services";
+import { contentApi } from "@/services/api/content";
+
+// What renders until an admin saves a real override via the Website
+// Content page (Phase 12) — see apps/admin/src/routes/content.tsx's
+// DEFAULT_HERO, which mirrors this on purpose so editing feels like
+// "tweak the current hero," not "fill in a blank form."
+const DEFAULT_HERO: HomepageHero = {
+  eyebrow: "Since the harvest of tradition",
+  heading: "Our Tradition,",
+  headingAccent: "Your Health.",
+  subtitle:
+    "Ancient millets, stone-ground flours and hand-picked nuts — sourced from Indian farms and packed the way food was always meant to be.",
+  image: heroImg,
+  ctaText: "Shop the Collection",
+  ctaLink: "/shop",
+};
 
 export const Route = createFileRoute("/")({
   loader: async () => {
-    const [bestsellers, categories] = await Promise.all([
+    const [bestsellers, categories, hero, banners] = await Promise.all([
       productService.getBestsellers(),
       categoryService.getCategories(),
+      contentApi.getHero().catch(() => null),
+      contentApi.getBanners().catch(() => []),
     ]);
-    return { bestsellers, categories };
+    return { bestsellers, categories, hero: hero ?? DEFAULT_HERO, banners };
   },
   head: () => ({
     meta: [
@@ -62,14 +81,29 @@ const testimonials = [
 ];
 
 function Index() {
-  const { bestsellers, categories } = Route.useLoaderData();
+  const { bestsellers, categories, hero, banners } = Route.useLoaderData();
 
   return (
     <SiteLayout>
+      {/* PROMO BANNERS — editable via admin's Banners page (Phase 12). Only
+          the highest-priority (lowest position) active one shows, as a slim
+          strip, rather than redesigning the homepage around a carousel. */}
+      {banners[0] ? (
+        <div className="bg-terracotta px-6 py-2.5 text-center text-xs font-medium text-paper">
+          {banners[0].link ? (
+            <Link to={banners[0].link as never} className="hover:underline">
+              {banners[0].title}
+            </Link>
+          ) : (
+            banners[0].title
+          )}
+        </div>
+      ) : null}
+
       {/* HERO */}
       <section className="relative overflow-hidden bg-olive text-paper">
         <img
-          src={heroImg}
+          src={hero.image}
           alt="Clay bowls of pearl, foxtail and finger millet on a linen cloth"
           width={1600}
           height={1104}
@@ -78,18 +112,17 @@ function Index() {
         <div className="absolute inset-0 bg-gradient-to-r from-olive-deep via-olive-deep/80 to-transparent" />
         <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-6 py-24 lg:py-36">
           <div className="max-w-2xl space-y-7">
-            <Eyebrow className="text-gold">Since the harvest of tradition</Eyebrow>
+            <Eyebrow className="text-gold">{hero.eyebrow}</Eyebrow>
             <h1 className="text-balance font-display text-5xl leading-[1.02] sm:text-6xl lg:text-7xl">
-              Our Tradition,
-              <span className="block italic text-gold">Your Health.</span>
+              {hero.heading}
+              <span className="block italic text-gold">{hero.headingAccent}</span>
             </h1>
             <p className="max-w-lg text-pretty text-base leading-relaxed text-paper/80">
-              Ancient millets, stone-ground flours and hand-picked nuts — sourced from Indian farms
-              and packed the way food was always meant to be.
+              {hero.subtitle}
             </p>
             <div className="flex flex-wrap items-center gap-4 pt-2">
-              <BtnLink to="/shop" size="lg" variant="gold">
-                Shop the Collection
+              <BtnLink to={hero.ctaLink as never} size="lg" variant="gold">
+                {hero.ctaText}
               </BtnLink>
               <BtnLink
                 to="/about"
