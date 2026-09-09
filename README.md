@@ -147,10 +147,11 @@ local `.env` — never committed).
   cart (`apps/api`'s `/cart`) for both guests (a persistent per-browser
   session id) and logged-in customers, merged automatically on
   login/register.
-- **Checkout** — real, Cash on Delivery only. Submitting creates a real
-  `Order` (with a real order number shown on `/order-success`), decrements
-  stock, and clears the cart. Online payment (UPI/Card/Netbanking) is
-  visibly disabled ("Coming soon") — Razorpay integration is Phase 9,
+- **Checkout** — real, Cash on Delivery only, with a working coupon code
+  field. Submitting creates a real `Order` (with a real order number shown
+  on `/order-success`), decrements stock, and clears the cart. Online
+  payment (UPI/Card/Netbanking) is visibly disabled ("Coming soon") —
+  Razorpay integration is Phase 9,
   blocked on the client's Razorpay account approval.
 - **`apps/api`** — `products` and `categories` are real, including admin
   create/update/delete under `/admin/products`/`/admin/categories`
@@ -160,13 +161,15 @@ local `.env` — never committed).
   logged-in sync). `checkout`/`orders` are real for Cash on Delivery
   (Phase 7), including admin order management under `/admin/orders`
   (Phase 8) and stock release on cancellation (Phase 10). `inventory`
-  (`/admin/inventory`) is real. Every other module (`customers`,
-  `payments`, `coupons`, `content`, `analytics`) is still scaffolded with
-  real route shapes and Zod validation but no business logic yet.
+  (`/admin/inventory`) is real. `coupons` is real — validated and applied
+  at checkout, admin CRUD at `/admin/coupons` (Phase 11). Every other
+  module (`customers`, `payments`, `content`, `analytics`) is still
+  scaffolded with real route shapes and Zod validation but no business
+  logic yet.
 - **`apps/admin`** — Products, Categories, Orders (list/detail/status
-  update), and Inventory (stock levels, low-stock badges, inline editing)
-  are real, backed by `apps/api`. Every other planned page
-  (Dashboard, Customers, Coupons, Banners, Content, Settings,
+  update), Inventory (stock levels, low-stock badges, inline editing), and
+  Coupons (list/add/edit/delete) are real, backed by `apps/api`. Every
+  other planned page (Dashboard, Customers, Banners, Content, Settings,
   Login) exists and is reachable with layout/table/form foundations, but
   isn't wired to real data yet.
 - **`packages/database`** — real Supabase database, schema migrated and

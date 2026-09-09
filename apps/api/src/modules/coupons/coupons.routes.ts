@@ -1,19 +1,16 @@
 import { Hono } from "hono";
 import { couponCodeSchema } from "@rajadhaniyam/shared";
-import { ok, notImplemented } from "../../utils/response";
-import { requireAdminAuth } from "../../middleware/auth";
+import { ok, formatZodError } from "../../utils/response";
+import { HttpError } from "../../middleware/errorHandler";
+import { couponsService } from "./coupons.service";
 
+// Public — a shopper needs to validate a code before logging in or
+// checking out. Admin CRUD lives in coupons.admin.routes.ts (/admin/coupons).
 export const couponsRoutes = new Hono();
 
 couponsRoutes.post("/validate", async (c) => {
   const parsed = couponCodeSchema.safeParse(await c.req.json().catch(() => ({})));
-  if (!parsed.success) return c.json({ success: false, message: "Invalid payload" }, 400);
-  return c.json(notImplemented("Coupon validation"), 501);
+  if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
+  const result = await couponsService.validate(parsed.data.code, parsed.data.subtotal);
+  return c.json(ok(result));
 });
-
-couponsRoutes.get("/", requireAdminAuth, (c) => c.json(ok([])));
-couponsRoutes.post("/", requireAdminAuth, (c) => c.json(notImplemented("Coupon creation"), 501));
-couponsRoutes.patch("/:id", requireAdminAuth, (c) => c.json(notImplemented("Coupon update"), 501));
-couponsRoutes.delete("/:id", requireAdminAuth, (c) =>
-  c.json(notImplemented("Coupon deletion"), 501),
-);

@@ -331,13 +331,33 @@ migrations are finalized against a hosted database.
   `Inventory.quantity` mirror), and cancelling it again doesn't
   double-release.
 
-## Phase 11 — Coupons
+## Phase 11 — Coupons ✅
 
 - **Objective:** Discount codes.
-- **Backend:** `Coupon` validation (percentage/flat, min order value,
-  expiry) applied at checkout.
-- **Admin:** coupon CRUD.
-- **Completion criteria:** a valid coupon reduces the checkout total.
+- **Backend:** `couponsService.validate(code, subtotal)` (in
+  `apps/api/src/modules/coupons`) checks active, not expired, and
+  `subtotal >= minOrderValue`, then computes the discount — percentage or
+  flat, capped so it can never exceed the subtotal. Used two ways: `POST
+  /coupons/validate` (public) is what the storefront's "Apply coupon"
+  button previews against, and `orders.service.ts`'s `createOrder`
+  **re-validates independently** at actual checkout rather than trusting
+  a client-supplied discount, since the preview could be stale (cart
+  changed, coupon deactivated) by submission time. Admin CRUD lives at
+  `/admin/coupons`; deleting a coupon already used by an order is blocked
+  with a `409` (same pattern as categories' product-count guard) rather
+  than silently orphaning that order's discount attribution. Coupon codes
+  are case-insensitive (normalized to uppercase on both write and read).
+- **Admin:** `CouponsPage` — list, add/edit (single-page form, no separate
+  route), delete.
+- **Frontend (storefront):** `routes/checkout.tsx` gained a coupon input
+  + Apply button, showing the discount line and adjusted total once
+  applied.
+- **Completion criteria:** a valid coupon reduces the checkout total. ✅
+  Verified fully in-browser: created a 15% coupon in the real admin UI,
+  applied it (typed lowercase, confirming case-insensitive matching) on
+  the real storefront checkout, completed the order, and confirmed in the
+  database that the stored discount/total matched exactly (₹95 subtotal →
+  ₹14.25 discount → ₹154.75 total, including the COD surcharge).
 
 ## Phase 12 — CMS / Banner Management
 

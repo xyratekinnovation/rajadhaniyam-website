@@ -8,9 +8,11 @@ import {
 } from "@rajadhaniyam/shared";
 import { HttpError } from "../../middleware/errorHandler";
 import { cartService, type CartIdentity } from "../cart/cart.service";
+import { couponsService } from "../coupons/coupons.service";
 
 const include = {
   items: true,
+  coupon: true,
 };
 
 type OrderRow = NonNullable<Awaited<ReturnType<typeof findOne>>>;
@@ -61,6 +63,7 @@ function toOrder(row: OrderRow): Order {
       postalCode: snapshot.postalCode,
       country: snapshot.country,
     },
+    couponCode: row.coupon?.code,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -77,9 +80,6 @@ export const ordersService = {
   // CartIdentity the cart uses — checkout reads whatever cart that identity
   // currently owns, same as cartService.get would.
   createOrder: async (identity: CartIdentity, input: CheckoutInput): Promise<Order> => {
-    if (input.couponCode) {
-      throw new HttpError(400, "Coupons aren't available yet — remove the coupon code to continue");
-    }
     // Razorpay isn't wired up yet (pending account approval) — Cash on
     // Delivery is the only payment method that can actually be fulfilled
     // right now. Reject the others clearly instead of creating an order
@@ -108,7 +108,19 @@ export const ordersService = {
     // base shipping charge.
     const baseShipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_FEE;
     const shipping = baseShipping + COD_SURCHARGE;
-    const total = subtotal + shipping;
+
+    // Re-validated here, never trusted from the client — a coupon preview
+    // shown earlier in the checkout flow could be stale (deactivated,
+    // expired, or the cart changed) by the time this actually submits.
+    let discount = 0;
+    let couponId: string | undefined;
+    if (input.couponCode) {
+      const result = await couponsService.validate(input.couponCode, subtotal);
+      discount = result.discount;
+      couponId = result.coupon.id;
+    }
+
+    const total = subtotal + shipping - discount;
 
     const shippingSnapshot = {
       fullName: input.contact.fullName,
@@ -130,7 +142,8 @@ export const ordersService = {
           shippingSnapshot,
           subtotal,
           shipping,
-          discount: 0,
+          discount,
+          couponId,
           total,
           status: "PENDING",
           paymentStatus: "PENDING",

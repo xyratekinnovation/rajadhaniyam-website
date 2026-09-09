@@ -15,6 +15,7 @@ import { ordersAdminRoutes } from "./modules/orders/orders.admin.routes";
 import { inventoryRoutes } from "./modules/inventory/inventory.routes";
 import { paymentsRoutes } from "./modules/payments/payments.routes";
 import { couponsRoutes } from "./modules/coupons/coupons.routes";
+import { couponsAdminRoutes } from "./modules/coupons/coupons.admin.routes";
 import { contentRoutes } from "./modules/content/content.routes";
 import { analyticsRoutes } from "./modules/analytics/analytics.routes";
 
@@ -48,6 +49,7 @@ app.route("/admin/products", productsAdminRoutes);
 app.route("/admin/categories", categoriesAdminRoutes);
 app.route("/admin/uploads", uploadsRoutes);
 app.route("/admin/orders", ordersAdminRoutes);
+app.route("/admin/coupons", couponsAdminRoutes);
 
 app.notFound((c) => c.json({ success: false, message: "Not found" }, 404));
 
