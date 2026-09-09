@@ -41,6 +41,13 @@
    to create the `product-images` bucket — it's idempotent, safe to re-run,
    and only needs to happen once per Supabase project (already done for
    the current one).
+6. Admin login already works against a Render deploy without further
+   setup — `bun run --cwd=apps/api create-admin` was already run once
+   against the shared Supabase database (Phase 5), and every environment
+   pointed at that same `DATABASE_URL` (local dev, Render) shares the same
+   `AdminUser` rows. Only run `create-admin` again to provision an
+   *additional* admin account or reset a password, not "to make prod work"
+   the current one).
 
 ## Known URLs (predicted, verify after first deploy)
 

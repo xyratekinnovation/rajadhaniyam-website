@@ -1,4 +1,5 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router";
+import { getToken } from "@/lib/auth";
 import { LoginPage } from "./routes/login";
 import { DashboardPage } from "./routes/dashboard";
 import { ProductsListPage } from "./routes/products/ProductsListPage";
@@ -17,7 +18,19 @@ import { SettingsPage } from "./routes/settings";
 // Admin is a plain CSR SPA (no SSR needed for an authenticated dashboard),
 // so routes are defined in code rather than via file-based codegen — there
 // is no routeTree.gen.ts to worry about here.
-const rootRoute = createRootRoute({ component: () => <Outlet /> });
+//
+// Route guard lives on the root, not per-route: every navigation checks for
+// a stored token and bounces to /login if it's missing. This only checks
+// *presence* — an expired/invalid token still gets past this guard and into
+// the page, but the first API call it makes 401s and client.ts's
+// handleUnauthorized() clears the session and redirects from there instead.
+const rootRoute = createRootRoute({
+  component: () => <Outlet />,
+  beforeLoad: ({ location }) => {
+    if (location.pathname === "/login") return;
+    if (!getToken()) throw redirect({ to: "/login" });
+  },
+});
 
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,

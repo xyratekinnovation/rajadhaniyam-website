@@ -112,17 +112,56 @@ migrations are finalized against a hosted database.
   edited it (verified real per-variant stock/price round-trips correctly
   after the fix above), deleted it, and confirmed removal.
 
-## Phase 5 — Customer & Admin Authentication
+## Phase 5 — Customer & Admin Authentication ✅ (except forgot-password)
 
 - **Objective:** Real auth for both `User` and `AdminUser`.
-- **Backend:** password hashing, JWT/session issuance, `requireAuth` /
-  `requireAdminAuth` middleware implemented for real, role checks.
-- **Frontend:** login/register/forgot-password/profile/address pages,
-  auth-aware header.
-- **Admin:** working login page, protected routes, role-based nav.
+- **Backend:** `Bun.password.hash`/`verify` (argon2id, no new dependency)
+  for password hashing; `hono/jwt`'s `sign`/`verify` (already ships with
+  the installed `hono` package) for stateless JWTs — see
+  `apps/api/src/utils/jwt.ts`. Tokens are discriminated by a `type:
+  "customer" | "admin"` claim so a customer token can never pass
+  `requireAdminAuth` even if a role name were to collide.
+  `requireAuth`/`requireAdminAuth` (`apps/api/src/middleware/auth.ts`) now
+  verify real JWTs instead of just checking a header is present — this
+  closes the Phase 4 security gap where any request with *any* bearer
+  token could reach `/admin/*`.
+  `POST /auth/register`, `/auth/login`, `/auth/admin/login`, `GET
+  /auth/me`, and `/auth/addresses` (full CRUD, ownership-checked so one
+  customer can't read/edit/delete another's address) are real.
+  `forgot-password`/`reset-password` are still `501` stubs — no email
+  sending infrastructure exists yet, out of scope here.
+- **Admin accounts have no self-serve signup** (by design — this isn't a
+  public registration surface). Provisioned via
+  `bun run --cwd=apps/api create-admin -- <email> <password> <name>
+  [role]`, idempotent (upserts by email, so re-running it resets a
+  password). Already run once against the shared Supabase database — the
+  same admin account works in every environment pointed at that database,
+  including after a Render deploy; no need to re-run there.
+- **Frontend (storefront):** real `/login`, `/register`, `/account`
+  (profile + full address management — add/delete, verified persisting
+  across reloads) pages (`apps/storefront/src/lib/auth.tsx` +
+  `src/routes/{login,register,account}.tsx`). Header's account icon now
+  routes to `/account` or `/login` based on real auth state, instead of
+  linking out to the admin app (a stray leftover from before auth
+  existed). **Auth state lives in `localStorage`, not a cookie** — this
+  app is SSR (TanStack Start), and localStorage doesn't exist on the
+  server, so auth state always renders "logged out" on the server/first
+  paint and corrects client-side after mount (matches how `CartProvider`
+  already behaves). Practical effect: `/account`'s data loads client-side
+  after mount, not via an SSR route loader like every other page here.
+- **Admin:** real login page, `POST /auth/admin/login`-backed
+  (`apps/admin/src/routes/login.tsx`). Route guard lives once on the
+  router root (`beforeLoad` checks for a stored token, `redirect`s to
+  `/login` otherwise) rather than per-route. `client.ts` now sends the
+  real stored token (replacing Phase 4's placeholder) and clears the
+  session + redirects to `/login` on any `401`. Role-based nav
+  differentiation (hide items by `AdminRole`) not done — no admin-only
+  page exists yet that would need it.
 - **Database:** `User`, `AdminUser`, `Address` tables in active use.
-- **Completion criteria:** a customer can register/login/manage addresses;
-  an admin can log in and is blocked from admin routes when logged out.
+- **Completion criteria:** a customer can register/login/manage addresses
+  ✅; an admin can log in and is blocked from admin routes when logged out
+  ✅. Both verified in-browser end to end (not just via curl), including
+  the redirect-when-logged-out behavior on both apps.
 
 ## Phase 6 — Cart Synchronization
 

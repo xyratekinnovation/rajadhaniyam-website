@@ -137,19 +137,24 @@ local `.env` — never committed).
   against Supabase. `apps/storefront/src/lib/shop-data.ts` still exists
   (kept as reference/seed source) but nothing outside the old
   `MockProductRepository`/`MockCategoryRepository` reads it anymore.
+- **Customer auth** — real. `/login`, `/register`, `/account` (profile +
+  address management) are backed by `apps/api`. Session lives in
+  `localStorage` (not a cookie), so it's client-side only — see
+  `apps/storefront/src/lib/auth.tsx`'s comment for what that means for SSR.
 - **Cart** — still local React state
-  (`apps/storefront/src/lib/cart.tsx`), unchanged behavior. Server-side
-  cart sync is Phase 6.
+  (`apps/storefront/src/lib/cart.tsx`), unchanged behavior, and not yet
+  tied to the logged-in customer. Server-side cart sync is Phase 6.
 - **Checkout** — the form UI is real; submitting still just clears the
   local cart and navigates to `/order-success`, no order is created yet
   (Phase 7).
 - **`apps/api`** — `products` and `categories` are real, including admin
   create/update/delete under `/admin/products`/`/admin/categories`
-  (Phase 4). Every other module (`auth`, `customers`, `cart`, `orders`,
-  `inventory`, `payments`, `coupons`, `content`, `analytics`) is still
-  scaffolded with real route shapes and Zod validation but no business
-  logic yet. **`/admin/*` routes are not really protected yet** — real
-  auth is Phase 5; see the roadmap's Phase 4 entry.
+  (Phase 4), now actually protected by real JWT verification (Phase 5).
+  `auth` is real: register/login (customer + separate admin credential
+  set), `/auth/me`, full address CRUD. Every other module (`customers`,
+  `cart`, `orders`, `inventory`, `payments`, `coupons`, `content`,
+  `analytics`) is still scaffolded with real route shapes and Zod
+  validation but no business logic yet.
 - **`apps/admin`** — Products and Categories (list/add/edit/delete) are
   real, backed by `apps/api`. Every other planned page (Dashboard, Orders,
   Order Detail, Customers, Inventory, Coupons, Banners, Content, Settings,

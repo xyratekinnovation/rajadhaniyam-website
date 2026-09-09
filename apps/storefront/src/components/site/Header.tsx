@@ -3,7 +3,7 @@ import { Menu, Search, ShoppingBag, User, X, Headphones, Truck } from "lucide-re
 import { useEffect, useState } from "react";
 import logo from "@/assets/logo.jpg.asset.json";
 import { useCart } from "@/lib/cart";
-import { ADMIN_URL } from "@/lib/admin-url";
+import { useAuth } from "@/lib/auth";
 
 const nav = [
   { label: "Home", to: "/" as const },
@@ -17,6 +17,7 @@ const nav = [
 
 export function Header() {
   const { count, setOpen } = useCart();
+  const { customer, isReady } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [menu, setMenu] = useState(false);
 
@@ -84,13 +85,13 @@ export function Header() {
             <button aria-label="Search" className="p-2 text-charcoal/80 hover:text-olive">
               <Search className="h-[1.15rem] w-[1.15rem]" />
             </button>
-            <a
-              href={ADMIN_URL}
+            <Link
+              to={isReady && customer ? "/account" : "/login"}
               aria-label="Account"
               className="hidden p-2 text-charcoal/80 hover:text-olive sm:block"
             >
               <User className="h-[1.15rem] w-[1.15rem]" />
-            </a>
+            </Link>
             <button
               aria-label="Cart"
               onClick={() => setOpen(true)}

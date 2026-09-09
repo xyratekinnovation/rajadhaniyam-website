@@ -8,7 +8,8 @@
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun run dist/index.js",
     "typecheck": "tsc --noEmit",
-    "setup-storage": "bun run scripts/setup-storage.ts"
+    "setup-storage": "bun run scripts/setup-storage.ts",
+    "create-admin": "bun run scripts/create-admin.ts"
   },
   "dependencies": {
     "@rajadhaniyam/database": "workspace:*",

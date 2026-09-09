@@ -14,12 +14,16 @@ export class ApiError extends Error {
 
 type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown };
 
-/**
- * Thin fetch wrapper for apps/api. Not yet used by any repository — the
- * storefront still runs on MockProductRepository/MockCategoryRepository.
- * Once apps/api is ready, an ApiProductRepository can call `apiGet`/`apiPost`
- * here instead of reading the hardcoded shop-data arrays.
- */
+/** Thin fetch wrapper for apps/api. */
+// Guarded — this module runs on the server too (SSR loaders), where
+// localStorage doesn't exist. Server-rendered requests are always
+// unauthenticated; see lib/auth.tsx's comment for why.
+function authHeader(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("customer_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
 
@@ -27,6 +31,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     ...rest,
     headers: {
       "Content-Type": "application/json",
+      ...authHeader(),
       ...headers,
     },
     credentials: "include",
