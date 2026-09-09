@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import type { Address } from "@rajadhaniyam/shared";
 import { Plus, Trash2 } from "lucide-react";
@@ -95,6 +95,9 @@ function AccountPage() {
           </button>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">{customer.email}</p>
+        <Link to="/orders" className="mt-3 inline-block text-sm text-olive underline">
+          View My Orders
+        </Link>
 
         <div className="mt-10 flex items-center justify-between">
           <h2 className="font-display text-2xl">Saved Addresses</h2>

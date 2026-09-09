@@ -254,14 +254,39 @@ migrations are finalized against a hosted database.
   the `Order`/`OrderItem`/`Payment` rows, the shipping snapshot, and the
   stock decrement were all exactly correct.
 
-## Phase 8 — Orders
+## Phase 8 — Orders ✅
 
 - **Objective:** Order history and detail views for both customer and admin.
-- **Frontend:** customer "My Orders" page.
-- **Admin:** `OrdersListPage`/`OrderDetailPage` show real data, status
-  updates.
-- **Completion criteria:** a customer can view past orders; an admin can
-  update order status.
+- **Backend:** admin order management split out of the customer-facing
+  `orders.routes.ts` into `orders.admin.routes.ts`, mounted at
+  `/admin/orders` — consistent with the `/admin/products`,
+  `/admin/categories` pattern (Phase 7 had briefly nested admin routes
+  under `/orders/admin/...`, inconsistent with that pattern; fixed here
+  rather than working around it with an ad-hoc client path). Added
+  `ordersService.getById` (admin — no ownership check, unlike
+  `getForCustomer`).
+- **Frontend (storefront):** `routes/orders/index.tsx` ("My Orders") and
+  `routes/orders/$orderId.tsx` (detail), same client-side-only pattern as
+  `/account` (see its comment — auth state doesn't exist during SSR).
+- **Bug found and fixed during testing, not by design:** these two started
+  as flat files, `routes/orders.tsx` and `routes/orders.$orderId.tsx`.
+  Under TanStack Router's file-based convention, a bare `<name>.tsx`
+  sibling to `<name>.$param.tsx` becomes an implicit **layout route** for
+  everything under `/<name>/*` — since `orders.tsx` didn't render an
+  `<Outlet />`, navigating to an order's detail page updated the URL and
+  page `<title>` (the route did match) but silently kept showing the list
+  page's content underneath. Fixed by moving both into an `orders/`
+  directory (`index.tsx` + `$orderId.tsx`) so neither implicitly nests
+  inside the other. Worth remembering for any future list+detail page
+  pair added the same way.
+- **Admin:** `OrdersListPage` (real data, status badges, link to detail)
+  and `OrderDetailPage` (line items, shipping address, payment info, and
+  a status dropdown wired to `PATCH /admin/orders/:id/status`) are both
+  real.
+- **Completion criteria:** a customer can view past orders ✅; an admin
+  can update order status ✅. Verified fully in-browser end to end: an
+  admin changed a real order's status to "confirmed," and the customer's
+  own order history and detail page immediately reflected it.
 
 ## Phase 9 — Payment Gateway
 

@@ -158,14 +158,13 @@ local `.env` — never committed).
   `auth` is real: register/login (customer + separate admin credential
   set), `/auth/me`, full address CRUD. `cart` is real (Phase 6, guest +
   logged-in sync). `checkout`/`orders` are real for Cash on Delivery
-  (Phase 7) — customer order history and admin order management read the
-  same real data, but the admin `OrdersListPage`/`OrderDetailPage` aren't
-  wired to it yet (Phase 8). Every other module (`customers`, `inventory`,
-  `payments`, `coupons`, `content`, `analytics`) is still scaffolded with
-  real route shapes and Zod validation but no business logic yet.
-- **`apps/admin`** — Products and Categories (list/add/edit/delete) are
-  real, backed by `apps/api`. Every other planned page (Dashboard, Orders,
-  Order Detail, Customers, Inventory, Coupons, Banners, Content, Settings,
+  (Phase 7), including admin order management under `/admin/orders`
+  (Phase 8). Every other module (`customers`, `inventory`, `payments`,
+  `coupons`, `content`, `analytics`) is still scaffolded with real route
+  shapes and Zod validation but no business logic yet.
+- **`apps/admin`** — Products, Categories, and Orders (list/detail/status
+  update) are real, backed by `apps/api`. Every other planned page
+  (Dashboard, Customers, Inventory, Coupons, Banners, Content, Settings,
   Login) exists and is reachable with layout/table/form foundations, but
   isn't wired to real data yet.
 - **`packages/database`** — real Supabase database, schema migrated and

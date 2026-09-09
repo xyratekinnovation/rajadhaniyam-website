@@ -194,6 +194,12 @@ export const ordersService = {
     return rows.map(toOrder);
   },
 
+  // Unlike getForCustomer, no ownership check — an admin can look up any order.
+  getById: async (id: string): Promise<Order | undefined> => {
+    const row = await prisma.order.findUnique({ where: { id }, include });
+    return row ? toOrder(row) : undefined;
+  },
+
   updateStatus: async (id: string, status: Order["status"]): Promise<Order> => {
     const row = await prisma.order.update({
       where: { id },
