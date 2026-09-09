@@ -388,12 +388,24 @@ migrations are finalized against a hosted database.
   UI, confirmed the homepage immediately showed the new hero copy and
   only the active banner — no deploy, no restart.
 
-## Phase 13 — Analytics
+## Phase 13 — Analytics ✅
 
 - **Objective:** Real numbers on the admin dashboard.
-- **Backend:** `analytics` module aggregates orders/revenue/customers.
-- **Admin:** `DashboardPage` stat cards and recent-orders table go live.
-- **Completion criteria:** dashboard reflects real order data.
+- **Backend:** `analyticsService.getSummary()` aggregates revenue/order
+  count (last 30 days), total products, total customers, and the 5 most
+  recent orders. Cancelled/refunded orders are excluded from **both** the
+  revenue sum and the order count — not just the sum — so "orders" and
+  "revenue" describe the same underlying set rather than a mismatched
+  count vs total. Recent orders still show cancelled ones (with their
+  real status visible), since that list is a history view, not a revenue
+  metric.
+- **Admin:** `DashboardPage` stat cards and recent-orders table are real,
+  loading + error states included.
+- **Completion criteria:** dashboard reflects real order data. ✅ Verified
+  via curl and in-browser: created a real order and confirmed revenue/
+  order counts updated correctly, then cancelled it and confirmed both
+  numbers correctly dropped back to excluding it (while still appearing
+  in the recent-orders list, marked cancelled).
 
 ## Phase 14 — Testing / Security
 

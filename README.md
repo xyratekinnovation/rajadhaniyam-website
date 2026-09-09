@@ -163,16 +163,18 @@ local `.env` — never committed).
   (Phase 8) and stock release on cancellation (Phase 10). `inventory`
   (`/admin/inventory`) is real. `coupons` is real — validated and applied
   at checkout, admin CRUD at `/admin/coupons` (Phase 11). `content` is
-  real — homepage hero override + banner CRUD (Phase 12). Every other
-  module (`customers`, `payments`, `analytics`) is still scaffolded with
-  real route shapes and Zod validation but no business logic yet.
-- **`apps/admin`** — Products, Categories, Orders (list/detail/status
-  update), Inventory (stock levels, low-stock badges, inline editing),
-  Coupons (list/add/edit/delete), and Website Content (homepage hero
-  editor) + Banners (list/add/edit/delete) are real, backed by `apps/api`.
-  Every other planned page (Dashboard, Customers, Settings, Login) exists
-  and is reachable with layout/table/form foundations, but
-  isn't wired to real data yet.
+  real — homepage hero override + banner CRUD (Phase 12). `analytics` is
+  real — revenue/order/product/customer aggregates for the dashboard
+  (Phase 13). Every other module (`customers`, `payments`) is still
+  scaffolded with real route shapes and Zod validation but no business
+  logic yet.
+- **`apps/admin`** — Dashboard (real stat cards + recent orders), Products,
+  Categories, Orders (list/detail/status update), Inventory (stock
+  levels, low-stock badges, inline editing), Coupons (list/add/edit/
+  delete), and Website Content (homepage hero editor) + Banners
+  (list/add/edit/delete) are real, backed by `apps/api`. Every other
+  planned page (Customers, Settings, Login) exists and is reachable with
+  layout/table/form foundations, but isn't wired to real data yet.
 - **`packages/database`** — real Supabase database, schema migrated and
   seeded (5 categories, 10 products, 18 variants) — see
   [`packages/database/README.md`](packages/database/README.md).

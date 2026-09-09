@@ -1,18 +1,11 @@
 import { Hono } from "hono";
 import { ok } from "../../utils/response";
 import { requireAdminAuth } from "../../middleware/auth";
+import { analyticsService } from "./analytics.service";
 
-// Backs the admin dashboard's stat cards. Placeholder zeros until orders/
-// products/customers are real (Phase 13 — analytics).
+// Backs the admin dashboard's stat cards and recent-orders table.
 export const analyticsRoutes = new Hono();
 
-analyticsRoutes.get("/summary", requireAdminAuth, (c) =>
-  c.json(
-    ok({
-      revenueLast30Days: 0,
-      ordersLast30Days: 0,
-      totalProducts: 0,
-      totalCustomers: 0,
-    }),
-  ),
-);
+analyticsRoutes.get("/summary", requireAdminAuth, async (c) => {
+  return c.json(ok(await analyticsService.getSummary()));
+});

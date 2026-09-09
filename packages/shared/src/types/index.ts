@@ -4,3 +4,4 @@ export * from "./customer";
 export * from "./order";
 export * from "./api";
 export * from "./content";
+export * from "./analytics";
