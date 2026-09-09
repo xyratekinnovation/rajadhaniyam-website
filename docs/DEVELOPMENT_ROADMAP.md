@@ -407,13 +407,39 @@ migrations are finalized against a hosted database.
   numbers correctly dropped back to excluding it (while still appearing
   in the recent-orders list, marked cancelled).
 
-## Phase 14 — Testing / Security
+## Phase 14 — Testing / Security ✅
 
 - **Objective:** Confidence before production traffic.
-- **All layers:** unit tests for services, integration tests for API
-  routes, security review (auth, input validation, rate limiting on
-  auth/checkout endpoints).
-- **Completion criteria:** CI runs typecheck + lint + tests on every PR.
+- **Unit tests (Bun's built-in `bun:test`, no Jest/Vitest dependency added):**
+  pure business logic extracted out of services specifically to make it
+  testable without a live database — `calculateDiscount` (coupons),
+  `calculateShipping`/`generateOrderNumber` (orders), `isLowStock`
+  (inventory) — plus `absoluteUrl`, JWT sign/verify round-trips,
+  `resolveCartIdentity`'s guest/logged-in/neither branches, and the
+  shared-package zod schemas (`checkoutSchema`, `couponInputSchema`,
+  `productInputSchema`/`categoryInputSchema`).
+- **Route-level tests:** `apps/api/src/app.test.ts` exercises the real Hono
+  app (`app.request(...)`, no server boot needed) for guard-rail paths that
+  never reach the database — missing/malformed bearer tokens on customer
+  and admin routes (401), malformed checkout payloads (400), unknown routes
+  (404), `/health`.
+- **Rate limiting:** in-memory fixed-window limiter
+  (`apps/api/src/middleware/rateLimit.ts`) applied to `/auth/register`,
+  `/auth/login`, `/auth/admin/login` (10 requests / 15 min / IP) and
+  `/checkout` (20 / 15 min / IP), keyed off `X-Forwarded-For`. Verified
+  against a live dev server: 11th login attempt in the window returns 429
+  with a `Retry-After` header, unrelated routes unaffected. Single-instance
+  only — if the API ever scales horizontally this needs a shared store
+  (Redis/Postgres) instead of the in-process `Map`.
+- **Security review:** ran the security-review skill against the auth/rate
+  limiting/checkout diff — no high/medium findings. Confirmed
+  `customerExists`/`adminExists` checks (Phase 6/7) mean a garbage bearer
+  token is rejected by JWT verification alone, never reaching the database.
+- **CI:** `.github/workflows/ci.yml` runs typecheck + lint + test + build on
+  every push/PR to `master`, using dummy `DATABASE_URL`/`DIRECT_URL` values
+  (Prisma's schema requires the env vars to exist to generate the client,
+  but nothing in typecheck/lint/test/build actually connects to a database).
+- **Completion criteria:** CI runs typecheck + lint + tests on every PR. ✅
 
 ## Phase 15 — Production Deployment
 

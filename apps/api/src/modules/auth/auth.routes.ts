@@ -3,18 +3,23 @@ import { loginSchema, registerSchema, addressInputSchema } from "@rajadhaniyam/s
 import { ok, formatZodError, notImplemented } from "../../utils/response";
 import { HttpError } from "../../middleware/errorHandler";
 import { requireAuth, type AuthEnv } from "../../middleware/auth";
+import { rateLimit } from "../../middleware/rateLimit";
 import { authService } from "./auth.service";
 
 export const authRoutes = new Hono<AuthEnv>();
 
-authRoutes.post("/register", async (c) => {
+// Credential-guessing endpoints — capped per IP so brute-forcing a password
+// or spamming account creation isn't free.
+const authRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, name: "auth" });
+
+authRoutes.post("/register", authRateLimit, async (c) => {
   const parsed = registerSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
   const result = await authService.register(parsed.data, c.req.header("x-cart-session"));
   return c.json(ok(result), 201);
 });
 
-authRoutes.post("/login", async (c) => {
+authRoutes.post("/login", authRateLimit, async (c) => {
   const parsed = loginSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
   const result = await authService.login(parsed.data, c.req.header("x-cart-session"));
@@ -61,7 +66,7 @@ authRoutes.delete("/addresses/:id", requireAuth, async (c) => {
 
 // Admin authentication is a separate credential set (AdminUser table), not
 // a role flag on the customer User model.
-authRoutes.post("/admin/login", async (c) => {
+authRoutes.post("/admin/login", authRateLimit, async (c) => {
   const parsed = loginSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
   const result = await authService.adminLogin(parsed.data);

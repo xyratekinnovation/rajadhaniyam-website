@@ -72,7 +72,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
       .get()
       .then((cart) => setLines(cart.items))
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, customer?.id]);
 
   const add = useCallback((product: Product, weight?: string, qty = 1) => {

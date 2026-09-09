@@ -17,6 +17,7 @@
     "build:api": "bun run --cwd=apps/api build",
     "lint": "bun run --cwd=apps/storefront lint && bun run --cwd=apps/admin lint",
     "typecheck": "bun run --cwd=apps/storefront typecheck && bun run --cwd=apps/admin typecheck && bun run --cwd=apps/api typecheck && bun run --cwd=packages/shared typecheck && bun run --cwd=packages/database typecheck && bun run --cwd=packages/ui typecheck",
+    "test": "bun run --cwd=apps/api test && bun run --cwd=packages/shared test",
     "format": "prettier --write ."
   },
   "devDependencies": {

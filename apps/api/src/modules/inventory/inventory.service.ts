@@ -2,6 +2,11 @@ import { prisma } from "@rajadhaniyam/database";
 import { LOW_STOCK_THRESHOLD, type InventoryItem } from "@rajadhaniyam/shared";
 import { HttpError } from "../../middleware/errorHandler";
 
+// Pure and exported for unit testing (inventory.service.test.ts).
+export function isLowStock(stock: number): boolean {
+  return stock <= LOW_STOCK_THRESHOLD;
+}
+
 export const inventoryService = {
   list: async (): Promise<InventoryItem[]> => {
     const variants = await prisma.productVariant.findMany({
@@ -16,7 +21,7 @@ export const inventoryService = {
       sku: v.sku,
       weight: v.weight,
       stock: v.stock,
-      lowStock: v.stock <= LOW_STOCK_THRESHOLD,
+      lowStock: isLowStock(v.stock),
     }));
   },
 
@@ -44,7 +49,7 @@ export const inventoryService = {
       sku: variant.sku,
       weight: variant.weight,
       stock: variant.stock,
-      lowStock: variant.stock <= LOW_STOCK_THRESHOLD,
+      lowStock: isLowStock(variant.stock),
     };
   },
 };

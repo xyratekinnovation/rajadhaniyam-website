@@ -3,6 +3,7 @@ import { checkoutSchema } from "@rajadhaniyam/shared";
 import { ok, formatZodError } from "../../utils/response";
 import { HttpError } from "../../middleware/errorHandler";
 import { requireAuth, optionalAuth, type AuthEnv, type OptionalAuthEnv } from "../../middleware/auth";
+import { rateLimit } from "../../middleware/rateLimit";
 import { resolveCartIdentity } from "../../utils/cartIdentity";
 import { ordersService } from "./orders.service";
 
@@ -27,7 +28,11 @@ ordersRoutes.get("/:id", requireAuth, async (c) => {
 // resolution as the cart (see cart.routes.ts's resolveIdentity comment).
 checkoutRoutes.use("*", optionalAuth);
 
-checkoutRoutes.post("/", async (c) => {
+// Order creation isn't free (writes rows, adjusts stock) — cap attempts per
+// IP so it can't be used to hammer the DB or spam orders.
+const checkoutRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, name: "checkout" });
+
+checkoutRoutes.post("/", checkoutRateLimit, async (c) => {
   const parsed = checkoutSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HttpError(400, formatZodError(parsed.error));
 

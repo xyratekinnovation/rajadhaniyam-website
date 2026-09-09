@@ -132,8 +132,7 @@ function OrderDetailPage() {
         </div>
 
         <p className="mt-4 text-xs text-muted-foreground">
-          Payment: Cash on Delivery ·{" "}
-          <span className="capitalize">{order.paymentStatus}</span>
+          Payment: Cash on Delivery · <span className="capitalize">{order.paymentStatus}</span>
         </p>
       </div>
     </SiteLayout>

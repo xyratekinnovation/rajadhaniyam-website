@@ -12,12 +12,14 @@
     "./utils": "./src/utils/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.14",
     "typescript": "^5.8.3"
   }
 }

@@ -8,6 +8,7 @@
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun run dist/index.js",
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "setup-storage": "bun run scripts/setup-storage.ts",
     "create-admin": "bun run scripts/create-admin.ts"
   },

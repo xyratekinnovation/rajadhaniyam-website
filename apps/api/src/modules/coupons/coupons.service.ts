@@ -28,6 +28,20 @@ function toPrismaType(type: "percentage" | "flat"): "PERCENTAGE" | "FLAT" {
   return type === "percentage" ? "PERCENTAGE" : "FLAT";
 }
 
+// Pure and exported so it's unit-testable without a database — see
+// coupons.service.test.ts. Never discounts past the subtotal itself, and
+// rounds to paise (2 decimal places) since a raw percentage-of-subtotal
+// calculation can produce more.
+export function calculateDiscount(
+  type: "PERCENTAGE" | "FLAT",
+  value: number,
+  subtotal: number,
+): number {
+  const rawDiscount = type === "PERCENTAGE" ? (subtotal * value) / 100 : value;
+  const discount = Math.min(rawDiscount, subtotal);
+  return Math.round(discount * 100) / 100;
+}
+
 export const couponsService = {
   // Real validation, used both by the storefront's "Apply coupon" button
   // (a preview) and by orders.service.ts at actual checkout (the source of
@@ -43,12 +57,9 @@ export const couponsService = {
       throw new HttpError(400, `This coupon needs a minimum order of ₹${minOrderValue}`);
     }
 
-    const value = Number(row.value);
-    const rawDiscount = row.type === "PERCENTAGE" ? (subtotal * value) / 100 : value;
-    // Never discount past the subtotal itself.
-    const discount = Math.min(rawDiscount, subtotal);
+    const discount = calculateDiscount(row.type, Number(row.value), subtotal);
 
-    return { coupon: toCoupon(row), discount: Math.round(discount * 100) / 100 };
+    return { coupon: toCoupon(row), discount };
   },
 
   // ---------- Admin ----------

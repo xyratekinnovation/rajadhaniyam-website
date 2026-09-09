@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  # Dummy values so Prisma's datasource env() checks and the api's zod-parsed
+  # config don't fail at import time — nothing in typecheck/lint/test actually
+  # connects to a database.
+  DATABASE_URL: "postgresql://user:password@localhost:5432/db?schema=public"
+  DIRECT_URL: "postgresql://user:password@localhost:5432/db?schema=public"
+  JWT_SECRET: "ci-secret"
+  SESSION_SECRET: "ci-secret"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: bun run --cwd=packages/database generate
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun run test
+
+      - name: Build
+        run: bun run build

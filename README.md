@@ -178,6 +178,13 @@ local `.env` — never committed).
 - **`packages/database`** — real Supabase database, schema migrated and
   seeded (5 categories, 10 products, 18 variants) — see
   [`packages/database/README.md`](packages/database/README.md).
+- **Testing / CI** (Phase 14) — unit tests (`bun:test`) for extracted pure
+  business logic (discount/shipping/low-stock calculations, JWT sign/verify,
+  cart identity resolution, shared zod schemas) plus route-level tests
+  against the real Hono app for auth-guard and validation-rejection paths.
+  Rate limiting on `/auth/*` login/register endpoints and `/checkout`
+  (in-memory, per-IP). `.github/workflows/ci.yml` runs
+  typecheck+lint+test+build on every push/PR.
 
 ## What's ready for backend integration
 

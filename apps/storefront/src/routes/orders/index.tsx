@@ -34,7 +34,10 @@ function OrdersPage() {
 
   useEffect(() => {
     if (!customer) return;
-    ordersApi.list().then(setOrders).catch(() => setOrders([]));
+    ordersApi
+      .list()
+      .then(setOrders)
+      .catch(() => setOrders([]));
   }, [customer]);
 
   if (!isReady || !customer) {

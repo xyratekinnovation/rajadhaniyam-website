@@ -68,11 +68,19 @@ function toOrder(row: OrderRow): Order {
   };
 }
 
-function generateOrderNumber(): string {
-  // Last 8 digits of epoch ms, which changes every millisecond — collisions
-  // would need two orders created in the same millisecond, not a real
-  // concern at this store's scale. Simpler than a retry-on-conflict loop.
+// Last 8 digits of epoch ms, which changes every millisecond — collisions
+// would need two orders created in the same millisecond, not a real concern
+// at this store's scale. Simpler than a retry-on-conflict loop.
+export function generateOrderNumber(): string {
   return `RJD${Date.now().toString().slice(-8)}`;
+}
+
+// Pure and exported for unit testing (orders.service.test.ts) — COD_SURCHARGE
+// is a cash-handling fee, not a delivery fee, so it applies even once the
+// order clears the free-shipping threshold, unlike the base shipping charge.
+export function calculateShipping(subtotal: number): number {
+  const baseShipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_FEE;
+  return baseShipping + COD_SURCHARGE;
 }
 
 export const ordersService = {
@@ -103,11 +111,7 @@ export const ordersService = {
     }
 
     const subtotal = cart.items.reduce((sum, i) => sum + i.price * i.qty, 0);
-    // COD_SURCHARGE is a cash-handling fee, not a delivery fee — it applies
-    // even when the order clears the free-shipping threshold, unlike the
-    // base shipping charge.
-    const baseShipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_FEE;
-    const shipping = baseShipping + COD_SURCHARGE;
+    const shipping = calculateShipping(subtotal);
 
     // Re-validated here, never trusted from the client — a coupon preview
     // shown earlier in the checkout flow could be stale (deactivated,

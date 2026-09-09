@@ -298,7 +298,11 @@ function Checkout() {
               </div>
             </dl>
             {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
-            <Btn type="submit" className="mt-6 w-full" disabled={lines.length === 0 || isSubmitting}>
+            <Btn
+              type="submit"
+              className="mt-6 w-full"
+              disabled={lines.length === 0 || isSubmitting}
+            >
               {isSubmitting ? "Placing Order..." : "Place Order"}
             </Btn>
           </aside>

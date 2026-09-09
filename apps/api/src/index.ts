@@ -56,6 +56,10 @@ app.route("/admin/banners", bannersAdminRoutes);
 
 app.notFound((c) => c.json({ success: false, message: "Not found" }, 404));
 
+// Exported for route-level tests (Hono's app.request()) — never imported by
+// runtime code, only by app.test.ts.
+export { app };
+
 console.log(`[api] listening on http://localhost:${env.API_PORT}`);
 
 export default {

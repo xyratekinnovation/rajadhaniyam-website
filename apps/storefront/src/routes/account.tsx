@@ -46,7 +46,10 @@ function AccountPage() {
 
   useEffect(() => {
     if (!customer) return;
-    authApi.listAddresses().then(setAddresses).catch(() => setAddresses([]));
+    authApi
+      .listAddresses()
+      .then(setAddresses)
+      .catch(() => setAddresses([]));
   }, [customer]);
 
   async function handleAddAddress(e: React.FormEvent) {
