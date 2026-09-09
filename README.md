@@ -105,7 +105,8 @@ file for the full list and comments; short version:
 
 | Variable                                          | Used by                         | Notes                                                     |
 | ------------------------------------------------- | ------------------------------- | --------------------------------------------------------- |
-| `DATABASE_URL`                                    | `packages/database`, `apps/api` | Postgres connection string — not required yet, see below  |
+| `DATABASE_URL`                                    | `packages/database`, `apps/api` | Supabase pooled connection string, needs `?pgbouncer=true` |
+| `DIRECT_URL`                                      | `packages/database`             | Supabase direct connection — `prisma migrate` only         |
 | `JWT_SECRET`, `SESSION_SECRET`                    | `apps/api`                      | Server-only, generate real random values before deploying |
 | `API_PORT`                                        | `apps/api`                      | Defaults to `4000`                                        |
 | `STOREFRONT_URL`, `ADMIN_URL`                     | `apps/api`                      | Used for CORS allow-list                                  |
@@ -121,10 +122,11 @@ app's own directory in dev.
 `packages/database/prisma/schema.prisma` defines the full schema (`User`,
 `AdminUser`, `Address`, `Category`, `Product`, `ProductVariant`,
 `ProductImage`, `Inventory`, `Cart`, `CartItem`, `Order`, `OrderItem`,
-`Payment`, `Coupon`, `Review`, `Banner`, `ContactEnquiry`) but **no
-database is connected yet** and no migration has been run. See
-[`packages/database/README.md`](packages/database/README.md) to provision
-one and run the first migration.
+`Payment`, `Coupon`, `Review`, `Banner`, `ContactEnquiry`), migrated against
+a real Supabase database and seeded with the storefront's mock catalog. See
+[`packages/database/README.md`](packages/database/README.md) for local
+setup (each contributor needs their own `DATABASE_URL`/`DIRECT_URL` in a
+local `.env` — never committed).
 
 ## What's mocked today
 
@@ -150,7 +152,9 @@ Implemented` — no business logic yet.
   Detail, Customers, Inventory, Coupons, Banners, Content, Settings,
   Login) with layout, sidebar, table/form/state foundations — no page is
   wired to real data yet.
-- **`packages/database`** — schema only, not migrated.
+- **`packages/database`** — connected to a real Supabase database, schema
+  migrated and seeded with the mock catalog, but `apps/api`'s route modules
+  don't query it yet themselves (Phase 3).
 
 ## What's ready for backend integration
 

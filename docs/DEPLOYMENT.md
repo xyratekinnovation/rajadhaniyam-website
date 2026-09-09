@@ -17,7 +17,11 @@
 
 1. **Supabase**: create a project at supabase.com → Project Settings →
    Database → copy the **connection string** (URI, "Transaction" pooler
-   mode for serverless-friendly connections). This becomes `DATABASE_URL`.
+   mode for serverless-friendly connections). This becomes `DATABASE_URL` —
+   append `?pgbouncer=true` to it, or every Prisma query fails with
+   `prepared statement "s0" already exists`. `apps/api` only needs this
+   pooled URL; `DIRECT_URL` (the non-pooled, port 5432 connection) is only
+   needed locally, for running `prisma migrate`.
 2. **Render**: sign up at render.com with GitHub → New → **Blueprint** →
    select `xyratekinnovation/rajadhaniyam-website` → Render reads
    [`render.yaml`](../render.yaml) at the repo root and proposes all three

@@ -23,16 +23,27 @@ migrations are finalized against a hosted database.
   `bun run build` all succeed; the storefront's existing pages render
   unchanged.
 
-## Phase 2 — Database + Prisma
+## Phase 2 — Database + Prisma ✅
 
 - **Objective:** Stand up a real PostgreSQL database and apply the schema
   in `packages/database/prisma/schema.prisma`.
 - **Backend:** wire `packages/database`'s `prisma` client into `apps/api`.
-- **Database:** provision Postgres (local Docker or hosted), set
-  `DATABASE_URL`, run `bun run --cwd=packages/database migrate:dev -- --name init`, seed initial
-  categories/products from `shop-data.ts` as a one-time migration script.
+- **Database:** provisioned on **Supabase**. Schema migrated
+  (`bun run --cwd=packages/database migrate:dev -- --name init`) and seeded
+  with the storefront's mock catalog
+  (`bun run --cwd=packages/database db:seed`, see `prisma/seed.ts`) — 5
+  categories, 10 products, 18 variants, all verified via direct Prisma
+  queries against the live database.
 - **Completion criteria:** `apps/api` can read/write through Prisma against
-  a real database in development.
+  a real database in development. ✅ Verified with a standalone script
+  (`prisma.product.findFirst` with relations) — `apps/api`'s route modules
+  don't query the database yet themselves, that's Phase 3.
+- **Gotchas hit (see `packages/database/prisma/schema.prisma` and
+  `docs/DEPLOYMENT.md`):** Supabase's pooled connection (port 6543,
+  PgBouncer transaction mode) can't run `prisma migrate dev`'s shadow
+  database — added a separate `directUrl` (port 5432) for migrations only.
+  The pooled `DATABASE_URL` also needs a `?pgbouncer=true` query param or
+  every query fails with `prepared statement "s0" already exists`.
 
 ## Phase 3 — Product / Category APIs
 
