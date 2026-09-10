@@ -12,6 +12,12 @@
   build step instead of using Docker.
 - **Supabase** provides the Postgres database for `packages/database`'s
   Prisma schema (Phase 2). Free tier is enough until real traffic arrives.
+- Both docker web services (`rajadhaniyam-api`, `rajadhaniyam-storefront`)
+  use Render's **free** plan, which doesn't require a card on file — the
+  tradeoff is the service spins down after ~15 min of no traffic and takes
+  30-60s to cold-start on the next request. Fine for a client demo; switch
+  `render.yaml`'s `plan: free` to `plan: starter` (paid, always-on) once
+  this needs to stay warm for real customers.
 
 ## One-time setup
 

@@ -8,6 +8,11 @@
 #
 # After the first Blueprint deploy, go to each service's Environment tab and
 # fill in the secrets marked `sync: false` below (never committed to git).
+#
+# `plan: free` on the two docker web services avoids requiring a card on
+# file, at the cost of the service spinning down after ~15 min idle (a
+# cold-started first request after that can take 30-60s). Fine for a client
+# demo; switch to `starter` once real traffic/uptime matters.
 
 services:
   - type: web
@@ -15,7 +20,7 @@ services:
     runtime: docker
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -44,7 +49,7 @@ services:
     runtime: docker
     dockerfilePath: ./apps/storefront/Dockerfile
     dockerContext: .
-    plan: starter
+    plan: free
     envVars:
       - key: NODE_ENV
         value: production
