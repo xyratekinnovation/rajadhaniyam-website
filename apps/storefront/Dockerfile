@@ -17,6 +17,13 @@ RUN bun install --frozen-lockfile
 COPY packages packages
 COPY apps/storefront apps/storefront
 
+# Vite bakes VITE_* vars into the build at build time, but Docker builds
+# don't see a service's runtime env vars by default — Render re-injects them
+# as build args with matching names, so they must be declared here to reach
+# the build step at all. See docs/DEPLOYMENT.md.
+ARG VITE_API_BASE_URL
+ARG VITE_ADMIN_URL
+
 # vite.config.ts pins Nitro's `node-server` preset (not the cloudflare-module
 # default) so this produces a plain Node server at .output/server/index.mjs —
 # see the comment there before changing it.

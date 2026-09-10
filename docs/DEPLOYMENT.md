@@ -89,3 +89,12 @@ internal-only.
   real `DATABASE_URL` exists, because `@rajadhaniyam/database` imports
   `PrismaClient` eagerly at module load — without a generated client, the
   API container fails to boot at all, not just on first query.
+- `apps/storefront/Dockerfile` declares `ARG VITE_API_BASE_URL`/
+  `ARG VITE_ADMIN_URL` before its build step. Docker builds don't see a
+  service's env vars by default, but Render re-injects them as build args
+  with matching names — without the `ARG` line, Vite bakes in nothing for
+  those vars and the deployed SSR pages fail every API call at runtime
+  with "Unable to connect. Is the computer able to access the url?" (found
+  on the first real Phase 15 deploy). `apps/admin` doesn't need this: its
+  build runs as a plain Render static-site build command, not inside
+  Docker, so it already sees env vars normally.
