@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { ProductCard } from "@/components/site/ProductCard";
 import { Eyebrow } from "@/components/site/ui";
+import { cn } from "@/lib/utils";
 import { productService, categoryService } from "@/services";
 
 type Search = { category?: string; sort?: string };
@@ -70,40 +71,71 @@ function Shop() {
         </div>
       </section>
 
+      {/* CATEGORY CHIP RAIL — horizontally scrollable so it works as well on
+          mobile as desktop, reusing the same category photos as the
+          homepage's "Shop by Category" section instead of a plain text list. */}
+      <div className="border-b border-border bg-paper">
+        <div className="mx-auto max-w-7xl px-6 py-6">
+          <div className="flex gap-6 overflow-x-auto scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <Link
+              to="/shop"
+              search={sort ? { sort } : {}}
+              className="flex flex-shrink-0 flex-col items-center gap-2"
+            >
+              <span
+                className={cn(
+                  "flex h-16 w-16 items-center justify-center rounded-full border-2 bg-sand/50 font-display text-sm transition-colors",
+                  !category ? "border-olive text-olive" : "border-transparent text-charcoal/70",
+                )}
+              >
+                All
+              </span>
+              <span
+                className={cn(
+                  "whitespace-nowrap text-xs",
+                  !category ? "font-semibold text-olive" : "text-muted-foreground",
+                )}
+              >
+                All Products
+              </span>
+            </Link>
+            {categories.map((c) => (
+              <Link
+                key={c.slug}
+                to="/shop"
+                search={sort ? { category: c.slug, sort } : { category: c.slug }}
+                className="flex flex-shrink-0 flex-col items-center gap-2"
+              >
+                <span
+                  className={cn(
+                    "h-16 w-16 overflow-hidden rounded-full border-2 transition-colors",
+                    category === c.slug ? "border-olive" : "border-transparent",
+                  )}
+                >
+                  <img
+                    src={c.image}
+                    alt=""
+                    width={64}
+                    height={64}
+                    className="h-full w-full object-cover"
+                  />
+                </span>
+                <span
+                  className={cn(
+                    "whitespace-nowrap text-xs",
+                    category === c.slug ? "font-semibold text-olive" : "text-muted-foreground",
+                  )}
+                >
+                  {c.name}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="mx-auto grid max-w-7xl gap-10 px-6 py-14 lg:grid-cols-[16rem_1fr]">
         <aside className="space-y-8">
-          <div>
-            <h2 className="eyebrow text-[0.62rem] text-muted-foreground">Categories</h2>
-            <ul className="mt-4 space-y-2 text-sm">
-              <li>
-                <Link
-                  to="/shop"
-                  search={sort ? { sort } : {}}
-                  className={
-                    !category ? "text-olive underline" : "text-charcoal/75 hover:text-olive"
-                  }
-                >
-                  All Products
-                </Link>
-              </li>
-              {categories.map((c) => (
-                <li key={c.slug}>
-                  <Link
-                    to="/shop"
-                    search={sort ? { category: c.slug, sort } : { category: c.slug }}
-                    className={
-                      category === c.slug
-                        ? "text-olive underline"
-                        : "text-charcoal/75 hover:text-olive"
-                    }
-                  >
-                    {c.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
           <div>
             <h2 className="eyebrow text-[0.62rem] text-muted-foreground">Max Price</h2>
             <input
