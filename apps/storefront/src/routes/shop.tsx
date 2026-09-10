@@ -59,8 +59,23 @@ function Shop() {
 
   return (
     <SiteLayout>
-      <section className="border-b border-border bg-olive py-16 text-paper">
-        <div className="mx-auto max-w-7xl px-6">
+      {/* When a specific category is active, its photo fills the banner
+          (same treatment as the homepage hero) instead of a flat olive
+          block — "All Products" has no single category image to show, so
+          it keeps the plain olive background. */}
+      <section className="relative overflow-hidden border-b border-border bg-olive py-16 text-paper">
+        {active ? (
+          <>
+            <img
+              key={active.slug}
+              src={active.image}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover opacity-70"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-olive-deep via-olive-deep/80 to-transparent" />
+          </>
+        ) : null}
+        <div className="relative mx-auto max-w-7xl px-6">
           <Eyebrow className="text-gold">The Collection</Eyebrow>
           <h1 className="mt-4 font-display text-5xl sm:text-6xl">
             {active ? active.name : "All Products"}
