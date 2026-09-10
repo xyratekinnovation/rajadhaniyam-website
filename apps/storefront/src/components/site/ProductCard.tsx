@@ -51,7 +51,6 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
 
         <Btn
-          variant="outline"
           size="sm"
           className="mt-3 w-full"
           disabled={!product.inStock}
