@@ -158,23 +158,25 @@ function Index() {
           title="A pantry built on ancient grains"
           subtitle="Five collections, each cleaned, milled and packed in small batches."
         />
-        <div className="mt-14 grid gap-5 md:grid-cols-3 lg:grid-rows-2">
+        {/* 3 cols x 2 rows = 6 cells; the featured tile spans 2 cols x 1 row
+            (2 cells) so it plus the 4 regular tiles fill exactly 6 cells —
+            a row-span-2 featured tile left a gap here, since 5 items can't
+            evenly fill 6 cells around a 2x2 block. */}
+        <div className="mt-14 grid gap-5 md:grid-cols-3">
           {categories.map((c, i) => (
             <Link
               key={c.slug}
               to="/shop"
               search={{ category: c.slug }}
               className={`group relative overflow-hidden bg-charcoal ${
-                i === 0 ? "md:col-span-2 md:row-span-2" : ""
+                i === 0 ? "md:col-span-2" : ""
               }`}
             >
               <img
                 src={c.image}
                 alt={c.name}
                 loading="lazy"
-                className={`w-full object-cover opacity-85 transition-all duration-700 group-hover:scale-105 group-hover:opacity-70 ${
-                  i === 0 ? "h-72 md:h-full md:min-h-[30rem]" : "h-56"
-                }`}
+                className="h-56 w-full object-cover opacity-85 transition-all duration-700 group-hover:scale-105 group-hover:opacity-70 md:h-64"
               />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-charcoal/85 via-charcoal/10 to-transparent" />
               <div className="absolute inset-x-0 bottom-0 p-6">
