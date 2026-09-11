@@ -15,9 +15,18 @@
 - Both docker web services (`rajadhaniyam-api`, `rajadhaniyam-storefront`)
   use Render's **free** plan, which doesn't require a card on file — the
   tradeoff is the service spins down after ~15 min of no traffic and takes
-  30-60s to cold-start on the next request. Fine for a client demo; switch
-  `render.yaml`'s `plan: free` to `plan: starter` (paid, always-on) once
-  this needs to stay warm for real customers.
+  30-60s to cold-start on the next request. Switch `render.yaml`'s
+  `plan: free` to `plan: starter` (paid, ~$7/mo/service, genuinely
+  always-on) once this needs to stay warm for real customers — the only
+  actual fix, since it removes the idle spin-down entirely.
+- `.github/workflows/keep-warm.yml` pings both services every 10 minutes
+  (under the 15-min idle threshold) as a free stopgap so they rarely go
+  fully idle during normal operation. It's a workaround, not a real fix:
+  it can't prevent a cold start right after a fresh deploy or a Render-side
+  restart, and GitHub can skip/delay scheduled runs under load. Scheduled
+  workflows are also auto-disabled after 60 days with no commits to the
+  repo — if pings stop, check the Actions tab and re-enable it, or push
+  anything to reset the clock.
 
 ## One-time setup
 

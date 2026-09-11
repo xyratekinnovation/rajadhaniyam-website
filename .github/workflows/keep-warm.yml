@@ -1,0 +1,33 @@
+name: Keep Render services warm
+
+# Render's free web services spin down after ~15 min of no traffic and take
+# 30-60s to wake on the next request. The storefront's pages fetch data from
+# the API during server-side render, so if the API happens to be asleep when
+# a visitor hits the storefront, that visit is slow or briefly errors. Ping
+# both every 10 minutes (comfortably under the 15-min idle threshold) so
+# neither ever goes fully idle during normal operation.
+#
+# This is a free workaround, not a real fix — see docs/DEPLOYMENT.md. It
+# won't prevent a cold start right after a fresh deploy or a Render-side
+# restart, and GitHub can skip/delay scheduled runs under high load, so it's
+# best-effort rather than a guarantee. Scheduled workflows are also disabled
+# automatically after 60 days with no repository commits — push something
+# (even docs) periodically, or re-enable it manually in the Actions tab.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 https://rajadhaniyam-api.onrender.com/health || echo "000")
+          echo "API health: $code"
+
+      - name: Ping storefront
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 https://rajadhaniyam-storefront.onrender.com/ || echo "000")
+          echo "Storefront: $code"
