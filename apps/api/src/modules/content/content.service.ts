@@ -1,7 +1,7 @@
 import { prisma } from "@rajadhaniyam/database";
 import type { Banner, BannerInput, HomepageHero, HomepageHeroInput } from "@rajadhaniyam/shared";
 import { HttpError } from "../../middleware/errorHandler";
-import { absoluteUrl } from "../../utils/images";
+import { absoluteUrl, toStoredPath } from "../../utils/images";
 
 const HOMEPAGE_HERO_KEY = "homepage_hero";
 
@@ -41,10 +41,11 @@ export const contentService = {
   },
 
   setHero: async (input: HomepageHeroInput): Promise<HomepageHero> => {
+    const value = { ...input, image: toStoredPath(input.image) };
     const row = await prisma.siteContent.upsert({
       where: { key: HOMEPAGE_HERO_KEY },
-      create: { key: HOMEPAGE_HERO_KEY, value: input },
-      update: { value: input },
+      create: { key: HOMEPAGE_HERO_KEY, value },
+      update: { value },
     });
     const hero = row.value as HomepageHero;
     return { ...hero, image: absoluteUrl(hero.image) };
@@ -79,7 +80,7 @@ export const contentService = {
     const row = await prisma.banner.create({
       data: {
         title: input.title,
-        image: input.image,
+        image: toStoredPath(input.image),
         link: input.link,
         position: input.position,
         active: input.active,
@@ -96,7 +97,7 @@ export const contentService = {
         where: { id },
         data: {
           title: input.title,
-          image: input.image,
+          image: toStoredPath(input.image),
           link: input.link ?? null,
           position: input.position,
           active: input.active,

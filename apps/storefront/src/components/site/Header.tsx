@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Menu, Search, ShoppingBag, User, X, Headphones, Truck } from "lucide-react";
 import { useEffect, useState } from "react";
-import logo from "@/assets/logo.jpg.asset.json";
+import logo from "@/assets/logo.png";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 
@@ -51,27 +51,20 @@ export function Header() {
         }`}
       >
         <div className="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-4 px-4 py-3 sm:px-6 lg:py-4">
-          <Link to="/" className="flex shrink-0 items-center gap-3">
-            <img
-              src={logo.url}
-              alt="Rajadhaniyam"
-              className="h-11 w-11 rounded-full object-cover ring-1 ring-gold/50"
-            />
-            <span className="hidden flex-col leading-none sm:flex">
-              <span className="font-display text-xl tracking-wide text-olive">RAJADHANIYAM</span>
-              <span className="eyebrow mt-1 text-[0.55rem] text-muted-foreground">
-                Our Tradition, Your Health
-              </span>
-            </span>
+          {/* The logo artwork already contains the "Rajadhaniyam" wordmark
+              and tagline, so it stands alone here rather than sitting next
+              to a duplicate text lockup. */}
+          <Link to="/" className="flex shrink-0 items-center">
+            <img src={logo} alt="Rajadhaniyam" className="h-12 w-auto object-contain sm:h-14" />
           </Link>
 
-          <nav className="hidden items-center justify-center gap-7 lg:flex">
+          <nav className="hidden items-center justify-center gap-6 xl:flex">
             {nav.map((n) => (
               <Link
                 key={n.label}
                 to={n.to}
                 search={n.search as never}
-                className="group relative py-1 text-[0.78rem] font-medium uppercase tracking-[0.12em] text-charcoal/80 transition-colors hover:text-olive"
+                className="group relative shrink-0 whitespace-nowrap py-1 text-sm font-medium uppercase tracking-[0.08em] text-charcoal/80 transition-colors hover:text-olive"
                 activeProps={{ className: "text-olive" }}
                 activeOptions={{ exact: n.to === "/" }}
               >
@@ -107,7 +100,7 @@ export function Header() {
             <button
               aria-label="Menu"
               onClick={() => setMenu((v) => !v)}
-              className="p-2 text-charcoal/80 lg:hidden"
+              className="p-2 text-charcoal/80 xl:hidden"
             >
               {menu ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
@@ -115,7 +108,7 @@ export function Header() {
         </div>
 
         {menu ? (
-          <nav className="border-t border-border bg-paper px-6 py-4 lg:hidden">
+          <nav className="border-t border-border bg-paper px-6 py-4 xl:hidden">
             <ul className="flex flex-col">
               {nav.map((n) => (
                 <li key={n.label} className="border-b border-border/60 last:border-0">

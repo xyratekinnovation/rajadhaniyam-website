@@ -20,22 +20,22 @@ export function ProductCard({ product }: { product: Product }) {
           loading="lazy"
           width={900}
           height={900}
-          className="aspect-square w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+          className="aspect-square w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
         />
         {product.bestseller ? (
-          <span className="eyebrow absolute left-0 top-4 bg-terracotta px-3 py-1.5 text-[0.6rem] text-paper">
+          <span className="eyebrow absolute left-0 top-4 bg-terracotta px-3 py-1.5 text-paper">
             Bestseller
           </span>
         ) : null}
         {!product.inStock ? (
-          <span className="eyebrow absolute right-3 top-4 bg-charcoal/85 px-3 py-1.5 text-[0.6rem] text-paper">
+          <span className="eyebrow absolute right-3 top-4 bg-charcoal/85 px-3 py-1.5 text-paper">
             Sold out
           </span>
         ) : null}
       </Link>
 
       <div className="flex flex-1 flex-col gap-2 p-4 sm:p-5">
-        <span className="eyebrow text-[0.6rem] text-muted-foreground">{product.category}</span>
+        <span className="eyebrow text-muted-foreground">{product.category}</span>
         <Link
           to="/product/$productId"
           params={{ productId: product.id }}
@@ -43,7 +43,7 @@ export function ProductCard({ product }: { product: Product }) {
         >
           {product.name}
         </Link>
-        <span className="text-xs text-muted-foreground">{product.weight}</span>
+        <span className="text-sm text-muted-foreground">{product.weight}</span>
 
         <div className="mt-auto flex items-baseline gap-2 pt-3">
           <span className="font-display text-2xl text-olive">{inr(product.price)}</span>
@@ -51,7 +51,7 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
 
         <Btn
-          size="sm"
+          size="md"
           className="mt-3 w-full"
           disabled={!product.inStock}
           onClick={() => {

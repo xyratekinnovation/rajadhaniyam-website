@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Mail, MapPin, Phone } from "lucide-react";
-import logo from "@/assets/logo.jpg.asset.json";
+import logo from "@/assets/logo.png";
 import { GrainOrnament } from "./ui";
 import { ADMIN_URL } from "@/lib/admin-url";
 
@@ -22,14 +22,11 @@ export function Footer() {
 
       <div className="mx-auto grid max-w-7xl gap-12 px-6 py-16 md:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <img
-              src={logo.url}
-              alt="Rajadhaniyam"
-              className="h-12 w-12 rounded-full object-cover ring-1 ring-gold/50"
-            />
-            <span className="font-display text-2xl tracking-wide text-paper">RAJADHANIYAM</span>
-          </div>
+          {/* The logo's own PNG has real transparency (confirmed by reading
+              back its corner pixels), and its wordmark already renders the
+              brand name, so it sits directly on the olive background at
+              natural size rather than in a plate or next to duplicate text. */}
+          <img src={logo} alt="Rajadhaniyam" className="h-14 w-auto object-contain" />
           <p className="max-w-xs text-sm leading-relaxed">
             Ancient grains and naturally sourced foods, brought to your table with the care of a
             family kitchen.
@@ -86,7 +83,9 @@ export function Footer() {
           <ul className="space-y-3.5 text-sm">
             <li className="flex items-start gap-2.5">
               <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-gold" />
-              <span>Rajadhaniyam Foods, 14 Mill Road, Peelamedu, Coimbatore 641004, Tamil Nadu</span>
+              <span>
+                Rajadhaniyam Foods, 14 Mill Road, Peelamedu, Coimbatore 641004, Tamil Nadu
+              </span>
             </li>
             <li className="flex items-center gap-2.5">
               <Phone className="h-4 w-4 flex-shrink-0 text-gold" />

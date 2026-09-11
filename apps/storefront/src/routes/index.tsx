@@ -100,24 +100,30 @@ function Index() {
         </div>
       ) : null}
 
-      {/* HERO */}
+      {/* HERO — the image is a full-bleed background across the whole
+          section (not a boxed side-by-side image), blending into the olive
+          background rather than sitting in its own frame. It previously
+          looked "empty" on the right not because of this treatment but
+          because the image itself was silently 404ing (see the hero-image
+          fix noted below) — with a real image underneath, a lighter
+          overlay lets it read as intentional rather than washed out. */}
       <section className="relative overflow-hidden bg-olive text-paper">
         <img
           src={hero.image}
           alt="Clay bowls of pearl, foxtail and finger millet on a linen cloth"
           width={1600}
           height={1104}
-          className="absolute inset-0 h-full w-full object-cover opacity-70"
+          className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-olive-deep via-olive-deep/80 to-transparent" />
-        <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-6 py-24 lg:py-36">
-          <div className="max-w-2xl space-y-7">
+        <div className="absolute inset-0 bg-gradient-to-r from-olive-deep via-olive-deep/65 to-olive-deep/10" />
+        <div className="relative mx-auto flex min-h-[480px] max-w-7xl items-center px-6 py-14 lg:min-h-[600px] lg:py-24">
+          <div className="max-w-xl space-y-6 lg:space-y-7">
             <Eyebrow className="text-gold">{hero.eyebrow}</Eyebrow>
-            <h1 className="text-balance font-display text-5xl leading-[1.02] sm:text-6xl lg:text-7xl">
+            <h1 className="text-balance font-display text-5xl leading-[0.98] sm:text-6xl lg:text-[4.25rem]">
               {hero.heading}
               <span className="block italic text-gold">{hero.headingAccent}</span>
             </h1>
-            <p className="max-w-lg text-pretty text-base leading-relaxed text-paper/80">
+            <p className="max-w-lg text-pretty text-base leading-relaxed text-paper/80 lg:text-lg">
               {hero.subtitle}
             </p>
             <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -152,7 +158,7 @@ function Index() {
       </section>
 
       {/* CATEGORIES — editorial grid */}
-      <section className="mx-auto max-w-7xl px-6 py-20 lg:py-28">
+      <section className="mx-auto max-w-7xl px-6 py-16 lg:py-24">
         <SectionHeading
           eyebrow="Shop by Category"
           title="A pantry built on ancient grains"
@@ -162,7 +168,7 @@ function Index() {
             (2 cells) so it plus the 4 regular tiles fill exactly 6 cells —
             a row-span-2 featured tile left a gap here, since 5 items can't
             evenly fill 6 cells around a 2x2 block. */}
-        <div className="mt-14 grid gap-5 md:grid-cols-3">
+        <div className="mt-10 grid gap-5 md:grid-cols-3">
           {categories.map((c, i) => (
             <Link
               key={c.slug}
@@ -184,7 +190,7 @@ function Index() {
                 <p className="mt-1 max-w-sm text-xs leading-relaxed text-paper/70">
                   {c.description}
                 </p>
-                <span className="eyebrow mt-3 inline-block text-[0.6rem] text-gold">Explore →</span>
+                <span className="eyebrow mt-3 inline-block text-gold">Explore →</span>
               </div>
             </Link>
           ))}
@@ -192,7 +198,7 @@ function Index() {
       </section>
 
       {/* BESTSELLERS */}
-      <section className="bg-paper py-20 lg:py-28">
+      <section className="bg-paper py-16 lg:py-24">
         <div className="mx-auto max-w-7xl px-6">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <SectionHeading
@@ -214,7 +220,7 @@ function Index() {
       </section>
 
       {/* STORY */}
-      <section className="relative overflow-hidden bg-ivory py-20 lg:py-28">
+      <section className="relative overflow-hidden bg-ivory py-16 lg:py-24">
         <GrainOrnament className="pointer-events-none absolute -left-4 top-16 h-64 w-28 text-gold/25" />
         <div className="mx-auto grid max-w-7xl items-center gap-14 px-6 lg:grid-cols-2">
           <div className="relative">
@@ -228,7 +234,7 @@ function Index() {
             />
             <div className="absolute -bottom-6 -right-4 hidden bg-olive px-8 py-6 text-paper sm:block">
               <p className="font-display text-4xl leading-none text-gold">40+</p>
-              <p className="eyebrow mt-2 text-[0.6rem] text-paper/70">Partner farms</p>
+              <p className="eyebrow mt-2 text-paper/70">Partner farms</p>
             </div>
           </div>
           <div className="space-y-6">
@@ -253,28 +259,30 @@ function Index() {
         </div>
       </section>
 
-      {/* QUOTE BAND */}
-      <section className="bg-olive py-20 text-center text-paper">
+      {/* QUOTE BAND — a brief editorial pause, not a full section: sized to
+          content rather than a fixed large py so it reads as a pause
+          between sections instead of another full-height block. */}
+      <section className="bg-olive py-14 text-center text-paper lg:py-16">
         <div className="mx-auto max-w-3xl px-6">
-          <Divider className="mb-8" />
-          <p className="text-balance font-display text-3xl italic leading-snug sm:text-4xl">
+          <Divider className="mb-7" />
+          <p className="text-balance font-display text-3xl italic leading-snug sm:text-4xl lg:text-5xl">
             “Real food does not need a label to explain itself.”
           </p>
-          <p className="eyebrow mt-6 text-[0.6rem] text-gold">The Rajadhaniyam promise</p>
+          <p className="eyebrow mt-6 text-gold">The Rajadhaniyam promise</p>
         </div>
       </section>
 
       {/* TESTIMONIALS */}
-      <section className="mx-auto max-w-7xl px-6 py-20 lg:py-28">
+      <section className="mx-auto max-w-7xl px-6 py-16 lg:py-24">
         <SectionHeading eyebrow="From our customers" title="Kitchens that trust us" />
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
+        <div className="mt-10 grid gap-6 md:grid-cols-3">
           {testimonials.map((t) => (
             <figure key={t.name} className="border border-border bg-paper p-8">
-              <div className="text-gold">★★★★★</div>
+              <div className="text-sm tracking-wider text-gold">★★★★★</div>
               <blockquote className="mt-4 text-sm leading-relaxed text-charcoal/85">
                 {t.quote}
               </blockquote>
-              <figcaption className="eyebrow mt-6 text-[0.6rem] text-muted-foreground">
+              <figcaption className="eyebrow mt-6 text-muted-foreground">
                 {t.name} · {t.city}
               </figcaption>
             </figure>
