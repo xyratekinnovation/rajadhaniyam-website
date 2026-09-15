@@ -1,7 +1,8 @@
 import { prisma } from "@rajadhaniyam/database";
-import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE, type Cart } from "@rajadhaniyam/shared";
+import { isShippingWaivedForProducts, type Cart } from "@rajadhaniyam/shared";
 import { HttpError } from "../../middleware/errorHandler";
 import { absoluteUrl } from "../../utils/images";
+import { settingsService } from "../settings/settings.service";
 
 export type CartIdentity = { userId: string } | { sessionId: string };
 
@@ -33,7 +34,7 @@ async function getOrCreateRow(identity: CartIdentity): Promise<CartRow> {
   return prisma.cart.create({ data: identityWhere(identity), include });
 }
 
-function toCart(row: CartRow): Cart {
+async function toCart(row: CartRow): Promise<Cart> {
   const items = row.items.map((item) => {
     const image = item.variant.product.images[0];
     return {
@@ -47,8 +48,16 @@ function toCart(row: CartRow): Cart {
     };
   });
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const shippingSettings = await settingsService.getShipping();
   const shipping =
-    subtotal === 0 || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_FEE;
+    subtotal === 0 ||
+    subtotal >= shippingSettings.freeShippingThreshold ||
+    isShippingWaivedForProducts(
+      items.map((i) => i.name),
+      shippingSettings.shippingWaivedProductName,
+    )
+      ? 0
+      : shippingSettings.standardShippingFee;
 
   return { id: row.id, items, subtotal, shipping, total: subtotal + shipping };
 }
@@ -74,7 +83,7 @@ async function resolveVariantId(productSlug: string, weight?: string): Promise<s
 export const cartService = {
   get: async (identity: CartIdentity): Promise<Cart> => {
     const row = await findRow(identity);
-    return row ? toCart(row) : { items: [], subtotal: 0, shipping: 0, total: 0 };
+    return row ? await toCart(row) : { items: [], subtotal: 0, shipping: 0, total: 0 };
   },
 
   addItem: async (

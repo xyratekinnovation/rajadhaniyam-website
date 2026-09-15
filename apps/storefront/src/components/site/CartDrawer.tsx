@@ -1,11 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { Minus, Plus, X } from "lucide-react";
-import { FREE_SHIPPING_THRESHOLD, useCart } from "@/lib/cart";
+import { useCart } from "@/lib/cart";
 import { inr } from "@/lib/shop-data";
 import { Btn, BtnLink } from "./ui";
 
 export function CartDrawer() {
-  const { lines, open, setOpen, setQty, remove, subtotal, shipping, total } = useCart();
+  const { lines, open, setOpen, setQty, remove, subtotal, shipping, total, freeShippingThreshold } =
+    useCart();
 
   return (
     <>
@@ -104,7 +105,7 @@ export function CartDrawer() {
               Proceed to Checkout
             </BtnLink>
             <div className="flex items-center justify-between text-[0.7rem] text-muted-foreground">
-              <span>Free shipping on orders above {inr(FREE_SHIPPING_THRESHOLD)}</span>
+              <span>Free shipping on orders above {inr(freeShippingThreshold)}</span>
               <Link to="/cart" onClick={() => setOpen(false)} className="underline">
                 View cart
               </Link>

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { COD_SURCHARGE, type CheckoutInput } from "@rajadhaniyam/shared";
+import type { CheckoutInput } from "@rajadhaniyam/shared";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { Btn, Eyebrow } from "@/components/site/ui";
 import { useCart } from "@/lib/cart";
@@ -26,17 +26,18 @@ export const Route = createFileRoute("/checkout")({
 const field =
   "h-11 w-full border border-input bg-paper px-4 text-sm outline-none focus:border-olive";
 
-const PAYMENT_OPTIONS: { value: CheckoutInput["paymentMethod"]; label: string }[] = [
-  { value: "upi", label: "UPI / GPay / PhonePe" },
-  { value: "card", label: "Credit or Debit Card" },
-  { value: "netbanking", label: "Net Banking" },
-  { value: "cod", label: `Cash on Delivery (+${inr(COD_SURCHARGE)})` },
-];
-
 function Checkout() {
-  const { lines, subtotal, shipping, total, clear } = useCart();
+  const { lines, subtotal, shipping, total, clear, shippingSettings } = useCart();
   const { customer } = useAuth();
   const navigate = useNavigate();
+  const codSurcharge = shippingSettings.codSurcharge;
+
+  const PAYMENT_OPTIONS: { value: CheckoutInput["paymentMethod"]; label: string }[] = [
+    { value: "upi", label: "UPI / GPay / PhonePe" },
+    { value: "card", label: "Credit or Debit Card" },
+    { value: "netbanking", label: "Net Banking" },
+    { value: "cod", label: `Cash on Delivery (+${inr(codSurcharge)})` },
+  ];
 
   const [fullName, setFullName] = useState(customer?.name ?? "");
   const [email, setEmail] = useState(customer?.email ?? "");
@@ -77,7 +78,7 @@ function Checkout() {
   // the server re-validates independently at submission regardless (see
   // orders.service.ts), so this only affects the on-page preview, not what
   // actually gets charged.
-  const codFee = paymentMethod === "cod" ? COD_SURCHARGE : 0;
+  const codFee = paymentMethod === "cod" ? codSurcharge : 0;
   const grandTotal = total + codFee - (appliedCoupon?.discount ?? 0);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -299,7 +300,7 @@ function Checkout() {
               {paymentMethod === "cod" ? (
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Cash on Delivery fee</dt>
-                  <dd>{inr(COD_SURCHARGE)}</dd>
+                  <dd>{inr(codSurcharge)}</dd>
                 </div>
               ) : null}
               {appliedCoupon ? (

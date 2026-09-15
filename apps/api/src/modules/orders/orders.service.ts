@@ -3,6 +3,7 @@ import {
   COD_SURCHARGE,
   FREE_SHIPPING_THRESHOLD,
   STANDARD_SHIPPING_FEE,
+  isShippingWaivedForProducts,
   type CheckoutInput,
   type CheckoutResult,
   type Order,
@@ -12,6 +13,7 @@ import { HttpError } from "../../middleware/errorHandler";
 import { cartService, type CartIdentity } from "../cart/cart.service";
 import { couponsService } from "../coupons/coupons.service";
 import { assertRazorpayConfigured, createRazorpayOrder } from "../payments/razorpay.client";
+import { settingsService } from "../settings/settings.service";
 
 const include = {
   items: true,
@@ -78,16 +80,26 @@ export function generateOrderNumber(): string {
   return `RJD${Date.now().toString().slice(-8)}`;
 }
 
-// Pure and exported for unit testing (orders.service.test.ts) — COD_SURCHARGE
+// Pure and exported for unit testing (orders.service.test.ts) — COD surcharge
 // is a cash-handling fee, not a delivery fee, so it applies even once the
 // order clears the free-shipping threshold, unlike the base shipping charge.
 // Online (Razorpay) methods do not include the COD surcharge.
 export function calculateShipping(
   subtotal: number,
   paymentMethod: CheckoutInput["paymentMethod"] = "cod",
+  options?: {
+    waiveBaseShipping?: boolean;
+    freeShippingThreshold?: number;
+    standardShippingFee?: number;
+    codSurcharge?: number;
+  },
 ): number {
-  const baseShipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_FEE;
-  return baseShipping + (paymentMethod === "cod" ? COD_SURCHARGE : 0);
+  const threshold = options?.freeShippingThreshold ?? FREE_SHIPPING_THRESHOLD;
+  const fee = options?.standardShippingFee ?? STANDARD_SHIPPING_FEE;
+  const cod = options?.codSurcharge ?? COD_SURCHARGE;
+  const baseShipping =
+    options?.waiveBaseShipping || subtotal >= threshold ? 0 : fee;
+  return baseShipping + (paymentMethod === "cod" ? cod : 0);
 }
 
 export const ordersService = {
@@ -113,7 +125,16 @@ export const ordersService = {
     }
 
     const subtotal = cart.items.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const shipping = calculateShipping(subtotal, input.paymentMethod);
+    const shippingSettings = await settingsService.getShipping();
+    const shipping = calculateShipping(subtotal, input.paymentMethod, {
+      waiveBaseShipping: isShippingWaivedForProducts(
+        cart.items.map((i) => i.productName),
+        shippingSettings.shippingWaivedProductName,
+      ),
+      freeShippingThreshold: shippingSettings.freeShippingThreshold,
+      standardShippingFee: shippingSettings.standardShippingFee,
+      codSurcharge: shippingSettings.codSurcharge,
+    });
 
     // Re-validated here, never trusted from the client — a coupon preview
     // shown earlier in the checkout flow could be stale (deactivated,

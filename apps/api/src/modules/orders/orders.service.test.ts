@@ -32,8 +32,12 @@ describe("calculateShipping", () => {
     expect(calculateShipping(FREE_SHIPPING_THRESHOLD, "card")).toBe(0);
     expect(calculateShipping(FREE_SHIPPING_THRESHOLD + 100, "netbanking")).toBe(0);
   });
-});
 
+  test("waiveBaseShipping skips the base fee but keeps COD surcharge for COD", () => {
+    expect(calculateShipping(1, "upi", { waiveBaseShipping: true })).toBe(0);
+    expect(calculateShipping(1, "cod", { waiveBaseShipping: true })).toBe(COD_SURCHARGE);
+  });
+});
 describe("generateOrderNumber", () => {
   test("starts with the RJD prefix", () => {
     expect(generateOrderNumber()).toMatch(/^RJD\d+$/);

@@ -7,12 +7,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from "@rajadhaniyam/shared";
+import {
+  DEFAULT_SHIPPING_SETTINGS,
+  isShippingWaivedForProducts,
+  type ShippingSettings,
+} from "@rajadhaniyam/shared";
 import type { Product } from "./shop-data";
 import { useAuth } from "./auth";
 import { cartApi } from "@/services/api/cart";
-
-export { FREE_SHIPPING_THRESHOLD };
+import { settingsApi } from "@/services/api/settings";
 
 export type CartLine = {
   id: string;
@@ -34,6 +37,8 @@ type CartCtx = {
   subtotal: number;
   shipping: number;
   total: number;
+  freeShippingThreshold: number;
+  shippingSettings: ShippingSettings;
   open: boolean;
   setOpen: (v: boolean) => void;
 };
@@ -60,7 +65,17 @@ const Ctx = createContext<CartCtx | null>(null);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [open, setOpen] = useState(false);
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettings>(
+    DEFAULT_SHIPPING_SETTINGS,
+  );
   const { customer, isReady } = useAuth();
+
+  useEffect(() => {
+    settingsApi
+      .getShipping()
+      .then(setShippingSettings)
+      .catch(() => {});
+  }, []);
 
   // Hydrate from the server on mount and whenever identity changes (login
   // merges the guest cart server-side — see auth.service.ts — so re-fetching
@@ -125,7 +140,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => {
     const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
     const shipping =
-      subtotal === 0 || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_FEE;
+      subtotal === 0 ||
+      subtotal >= shippingSettings.freeShippingThreshold ||
+      isShippingWaivedForProducts(
+        lines.map((l) => l.name),
+        shippingSettings.shippingWaivedProductName,
+      )
+        ? 0
+        : shippingSettings.standardShippingFee;
     return {
       lines,
       add,
@@ -136,10 +158,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       subtotal,
       shipping,
       total: subtotal + shipping,
+      freeShippingThreshold: shippingSettings.freeShippingThreshold,
+      shippingSettings,
       open,
       setOpen,
     };
-  }, [lines, add, setQty, remove, clear, open]);
+  }, [lines, add, setQty, remove, clear, open, shippingSettings]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

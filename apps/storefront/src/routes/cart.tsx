@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { BtnLink, Eyebrow } from "@/components/site/ui";
-import { FREE_SHIPPING_THRESHOLD, useCart } from "@/lib/cart";
+import { useCart } from "@/lib/cart";
 import { inr } from "@/lib/shop-data";
 
 export const Route = createFileRoute("/cart")({
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const { lines, setQty, remove, subtotal, shipping, total } = useCart();
+  const { lines, setQty, remove, subtotal, shipping, total, freeShippingThreshold } = useCart();
 
   return (
     <SiteLayout>
@@ -104,7 +104,7 @@ function CartPage() {
                 Checkout
               </BtnLink>
               <p className="mt-3 text-center text-[0.7rem] text-muted-foreground">
-                Free shipping above {inr(FREE_SHIPPING_THRESHOLD)}
+                Free shipping above {inr(freeShippingThreshold)}
               </p>
             </aside>
           </div>
