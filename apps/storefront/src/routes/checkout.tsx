@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { COD_SURCHARGE } from "@rajadhaniyam/shared";
+import { COD_SURCHARGE, type CheckoutInput } from "@rajadhaniyam/shared";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { Btn, Eyebrow } from "@/components/site/ui";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
+import { openRazorpayCheckout } from "@/lib/razorpay";
 import { inr } from "@/lib/shop-data";
-import { checkoutApi } from "@/services/api/checkout";
+import { checkoutApi, paymentsApi } from "@/services/api/checkout";
 import { couponsApi } from "@/services/api/coupons";
 import { ApiError } from "@/services/api/client";
 
@@ -25,17 +26,12 @@ export const Route = createFileRoute("/checkout")({
 const field =
   "h-11 w-full border border-input bg-paper px-4 text-sm outline-none focus:border-olive";
 
-// Razorpay isn't wired up yet — the account is pending approval, so Cash on
-// Delivery is the only payment method the backend will actually accept
-// (see apps/api/src/modules/orders/orders.service.ts). Keeping the other
-// options visible but disabled, rather than removing them, so it's obvious
-// this is temporary and not a missing feature.
-const PAYMENT_OPTIONS = [
-  ["upi", "UPI / GPay / PhonePe", true],
-  ["card", "Credit or Debit Card", true],
-  ["netbanking", "Net Banking", true],
-  ["cod", `Cash on Delivery (+${inr(COD_SURCHARGE)})`, false],
-] as const;
+const PAYMENT_OPTIONS: { value: CheckoutInput["paymentMethod"]; label: string }[] = [
+  { value: "upi", label: "UPI / GPay / PhonePe" },
+  { value: "card", label: "Credit or Debit Card" },
+  { value: "netbanking", label: "Net Banking" },
+  { value: "cod", label: `Cash on Delivery (+${inr(COD_SURCHARGE)})` },
+];
 
 function Checkout() {
   const { lines, subtotal, shipping, total, clear } = useCart();
@@ -50,6 +46,7 @@ function Checkout() {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<CheckoutInput["paymentMethod"]>("upi");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -80,21 +77,44 @@ function Checkout() {
   // the server re-validates independently at submission regardless (see
   // orders.service.ts), so this only affects the on-page preview, not what
   // actually gets charged.
-  const grandTotal = total + COD_SURCHARGE - (appliedCoupon?.discount ?? 0);
+  const codFee = paymentMethod === "cod" ? COD_SURCHARGE : 0;
+  const grandTotal = total + codFee - (appliedCoupon?.discount ?? 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setIsSubmitting(true);
     try {
-      const order = await checkoutApi.createOrder({
+      const result = await checkoutApi.createOrder({
         contact: { fullName, email, phone },
         address: { line1, line2: line2 || undefined, city, state, postalCode, country: "India" },
-        paymentMethod: "cod",
+        paymentMethod,
         couponCode: appliedCoupon?.code,
       });
+
+      if (result.razorpay) {
+        try {
+          const payment = await openRazorpayCheckout(result.razorpay);
+          await paymentsApi.verify({
+            orderId: result.order.id,
+            razorpayOrderId: payment.razorpay_order_id,
+            razorpayPaymentId: payment.razorpay_payment_id,
+            razorpaySignature: payment.razorpay_signature,
+          });
+        } catch (payErr) {
+          setError(
+            payErr instanceof Error && payErr.message === "Payment cancelled"
+              ? "Payment was cancelled. Your order is unpaid — please try again from checkout, or choose Cash on Delivery."
+              : payErr instanceof ApiError
+                ? payErr.message
+                : "Payment could not be completed. Please try again or choose Cash on Delivery.",
+          );
+          return;
+        }
+      }
+
       clear();
-      navigate({ to: "/order-success", search: { orderNumber: order.orderNumber } });
+      navigate({ to: "/order-success", search: { orderNumber: result.order.orderNumber } });
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -187,33 +207,27 @@ function Checkout() {
             <section className="border border-border bg-paper p-6">
               <h2 className="font-display text-2xl">Payment</h2>
               <p className="mt-2 text-xs text-muted-foreground">
-                Online payments are launching soon. Cash on Delivery is available today.
+                Pay securely online with UPI, card, or net banking — or choose Cash on Delivery.
               </p>
               <div className="mt-5 space-y-3">
-                {PAYMENT_OPTIONS.map(([v, label, disabled]) => (
+                {PAYMENT_OPTIONS.map(({ value, label }) => (
                   <label
-                    key={v}
-                    className={`flex items-center gap-3 border p-4 text-sm ${
-                      disabled
-                        ? "cursor-not-allowed border-input opacity-50"
-                        : "cursor-pointer border-olive bg-olive/5"
+                    key={value}
+                    className={`flex cursor-pointer items-center gap-3 border p-4 text-sm ${
+                      paymentMethod === value
+                        ? "border-olive bg-olive/5"
+                        : "border-input hover:border-olive/50"
                     }`}
                   >
                     <input
                       type="radio"
                       name="pay"
-                      value={v}
-                      checked={v === "cod"}
-                      disabled={disabled}
-                      readOnly
+                      value={value}
+                      checked={paymentMethod === value}
+                      onChange={() => setPaymentMethod(value)}
                       className="accent-olive"
                     />
                     {label}
-                    {disabled ? (
-                      <span className="ml-auto text-[0.65rem] uppercase tracking-wide text-muted-foreground">
-                        Coming soon
-                      </span>
-                    ) : null}
                   </label>
                 ))}
               </div>
@@ -282,10 +296,12 @@ function Checkout() {
                 <dt className="text-muted-foreground">Shipping</dt>
                 <dd>{shipping === 0 ? "Free" : inr(shipping)}</dd>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Cash on Delivery fee</dt>
-                <dd>{inr(COD_SURCHARGE)}</dd>
-              </div>
+              {paymentMethod === "cod" ? (
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Cash on Delivery fee</dt>
+                  <dd>{inr(COD_SURCHARGE)}</dd>
+                </div>
+              ) : null}
               {appliedCoupon ? (
                 <div className="flex justify-between text-olive">
                   <dt>Discount ({appliedCoupon.code})</dt>
@@ -298,12 +314,14 @@ function Checkout() {
               </div>
             </dl>
             {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
-            <Btn
-              type="submit"
-              className="mt-6 w-full"
-              disabled={lines.length === 0 || isSubmitting}
-            >
-              {isSubmitting ? "Placing Order..." : "Place Order"}
+            <Btn type="submit" className="mt-6 w-full" disabled={lines.length === 0 || isSubmitting}>
+              {isSubmitting
+                ? paymentMethod === "cod"
+                  ? "Placing Order..."
+                  : "Processing Payment..."
+                : paymentMethod === "cod"
+                  ? "Place Order"
+                  : "Pay Securely"}
             </Btn>
           </aside>
         </form>

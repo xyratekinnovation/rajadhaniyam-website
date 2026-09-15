@@ -29,4 +29,13 @@ export const couponCodeSchema = z.object({
   subtotal: z.number().nonnegative(),
 });
 
+/** Client → POST /payments/verify after Razorpay Checkout success. */
+export const paymentVerifySchema = z.object({
+  orderId: z.string().min(1),
+  razorpayOrderId: z.string().min(1),
+  razorpayPaymentId: z.string().min(1),
+  razorpaySignature: z.string().min(1),
+});
+
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
+export type PaymentVerifyInput = z.infer<typeof paymentVerifySchema>;

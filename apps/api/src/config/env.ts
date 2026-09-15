@@ -16,8 +16,11 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().default("dev-only-insecure-secret"),
   STOREFRONT_URL: z.string().default("http://localhost:8080"),
   ADMIN_URL: z.string().default("http://localhost:4001"),
+  // Razorpay Key ID / Key Secret (PAYMENT_PROVIDER_* names kept for Render/env continuity).
   PAYMENT_PROVIDER_KEY: z.string().optional(),
   PAYMENT_PROVIDER_SECRET: z.string().optional(),
+  // Webhook signing secret from Razorpay Dashboard → Webhooks (optional until configured).
+  PAYMENT_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

@@ -40,3 +40,26 @@ export type Coupon = {
   active: boolean;
   expiresAt?: string;
 };
+
+/** Client payload to open Razorpay Checkout after POST /checkout (online methods). */
+export type RazorpayCheckoutPayload = {
+  keyId: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  prefill: {
+    name: string;
+    email: string;
+    contact: string;
+  };
+  /** Preferred Checkout method matching the selected paymentMethod. */
+  preferMethod: "upi" | "card" | "netbanking";
+};
+
+/** Response from POST /checkout — includes Razorpay fields when paying online. */
+export type CheckoutResult = {
+  order: Order;
+  razorpay?: RazorpayCheckoutPayload;
+};

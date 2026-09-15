@@ -4,11 +4,14 @@ import {
   FREE_SHIPPING_THRESHOLD,
   STANDARD_SHIPPING_FEE,
   type CheckoutInput,
+  type CheckoutResult,
   type Order,
+  type RazorpayCheckoutPayload,
 } from "@rajadhaniyam/shared";
 import { HttpError } from "../../middleware/errorHandler";
 import { cartService, type CartIdentity } from "../cart/cart.service";
 import { couponsService } from "../coupons/coupons.service";
+import { assertRazorpayConfigured, createRazorpayOrder } from "../payments/razorpay.client";
 
 const include = {
   items: true,
@@ -78,25 +81,24 @@ export function generateOrderNumber(): string {
 // Pure and exported for unit testing (orders.service.test.ts) — COD_SURCHARGE
 // is a cash-handling fee, not a delivery fee, so it applies even once the
 // order clears the free-shipping threshold, unlike the base shipping charge.
-export function calculateShipping(subtotal: number): number {
+// Online (Razorpay) methods do not include the COD surcharge.
+export function calculateShipping(
+  subtotal: number,
+  paymentMethod: CheckoutInput["paymentMethod"] = "cod",
+): number {
   const baseShipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_FEE;
-  return baseShipping + COD_SURCHARGE;
+  return baseShipping + (paymentMethod === "cod" ? COD_SURCHARGE : 0);
 }
 
 export const ordersService = {
   // Called by checkoutRoutes. `identity` is the same guest-or-customer
   // CartIdentity the cart uses — checkout reads whatever cart that identity
   // currently owns, same as cartService.get would.
-  createOrder: async (identity: CartIdentity, input: CheckoutInput): Promise<Order> => {
-    // Razorpay isn't wired up yet (pending account approval) — Cash on
-    // Delivery is the only payment method that can actually be fulfilled
-    // right now. Reject the others clearly instead of creating an order
-    // that can never be paid for online.
-    if (input.paymentMethod !== "cod") {
-      throw new HttpError(
-        503,
-        "Online payment isn't available yet — please choose Cash on Delivery for now",
-      );
+  createOrder: async (identity: CartIdentity, input: CheckoutInput): Promise<CheckoutResult> => {
+    const isOnline = input.paymentMethod !== "cod";
+    if (isOnline) {
+      // Fail fast before touching cart/stock if Razorpay keys are missing.
+      assertRazorpayConfigured();
     }
 
     const cart = await cartService.getRawForCheckout(identity);
@@ -111,7 +113,7 @@ export const ordersService = {
     }
 
     const subtotal = cart.items.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const shipping = calculateShipping(subtotal);
+    const shipping = calculateShipping(subtotal, input.paymentMethod);
 
     // Re-validated here, never trusted from the client — a coupon preview
     // shown earlier in the checkout flow could be stale (deactivated,
@@ -125,6 +127,7 @@ export const ordersService = {
     }
 
     const total = subtotal + shipping - discount;
+    const orderNumber = generateOrderNumber();
 
     const shippingSnapshot = {
       fullName: input.contact.fullName,
@@ -140,7 +143,7 @@ export const ordersService = {
     const row = await prisma.$transaction(async (tx) => {
       const order = await tx.order.create({
         data: {
-          orderNumber: generateOrderNumber(),
+          orderNumber,
           userId: "userId" in identity ? identity.userId : null,
           email: input.contact.email,
           shippingSnapshot,
@@ -161,7 +164,12 @@ export const ordersService = {
             })),
           },
           payment: {
-            create: { provider: "cod", method: "cod", amount: total, status: "PENDING" },
+            create: {
+              provider: isOnline ? "razorpay" : "cod",
+              method: input.paymentMethod,
+              amount: total,
+              status: "PENDING",
+            },
           },
         },
         include,
@@ -187,7 +195,51 @@ export const ordersService = {
       return order;
     });
 
-    return toOrder(row);
+    const order = toOrder(row);
+
+    if (!isOnline) {
+      return { order };
+    }
+
+    // Create Razorpay order after our DB row exists. On failure, cancel + restock
+    // so inventory isn't left reserved for an unpayable order.
+    try {
+      const { keyId } = assertRazorpayConfigured();
+      const rzpOrder = await createRazorpayOrder({
+        amountInr: total,
+        receipt: orderNumber,
+        notes: { orderId: order.id, orderNumber },
+      });
+
+      await prisma.payment.update({
+        where: { orderId: order.id },
+        data: { providerPaymentId: rzpOrder.id },
+      });
+
+      const razorpay: RazorpayCheckoutPayload = {
+        keyId,
+        orderId: rzpOrder.id,
+        amount: rzpOrder.amount,
+        currency: rzpOrder.currency,
+        name: "Rajadhaniyam",
+        description: `Order ${orderNumber}`,
+        prefill: {
+          name: input.contact.fullName,
+          email: input.contact.email,
+          contact: input.contact.phone,
+        },
+        preferMethod: input.paymentMethod as "upi" | "card" | "netbanking",
+      };
+
+      return { order, razorpay };
+    } catch (err) {
+      await ordersService.markPaymentFailed(order.id);
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(
+        502,
+        "Couldn't start online payment — please try again or use Cash on Delivery",
+      );
+    }
   },
 
   listForCustomer: async (userId: string): Promise<Order[]> => {
@@ -243,5 +295,90 @@ export const ordersService = {
     });
 
     return toOrder(row);
+  },
+
+  /** Mark order paid after verified Razorpay payment (idempotent if already paid). */
+  markPaymentPaid: async (orderId: string): Promise<Order> => {
+    const row = await prisma.$transaction(async (tx) => {
+      const existing = await tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { ...include, payment: true },
+      });
+
+      if (existing.paymentStatus === "PAID") {
+        return tx.order.findUniqueOrThrow({ where: { id: orderId }, include });
+      }
+
+      if (existing.status === "CANCELLED") {
+        throw new HttpError(409, "This order was cancelled and can't be marked paid");
+      }
+
+      await tx.payment.update({
+        where: { orderId },
+        data: { status: "PAID" },
+      });
+
+      return tx.order.update({
+        where: { id: orderId },
+        data: { paymentStatus: "PAID", status: "CONFIRMED" },
+        include,
+      });
+    });
+
+    return toOrder(row);
+  },
+
+  /**
+   * Mark payment failed, cancel the order, and restore stock.
+   * Idempotent if already cancelled / failed.
+   */
+  markPaymentFailed: async (orderId: string): Promise<Order> => {
+    const row = await prisma.$transaction(async (tx) => {
+      const existing = await tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: true, payment: true },
+      });
+
+      if (existing.paymentStatus === "PAID") {
+        throw new HttpError(409, "This order is already paid");
+      }
+
+      if (existing.payment) {
+        await tx.payment.update({
+          where: { orderId },
+          data: { status: "FAILED" },
+        });
+      }
+
+      if (existing.status !== "CANCELLED") {
+        for (const item of existing.items) {
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: { stock: { increment: item.qty } },
+          });
+          await tx.inventory.updateMany({
+            where: { variantId: item.variantId },
+            data: { quantity: { increment: item.qty } },
+          });
+        }
+      }
+
+      return tx.order.update({
+        where: { id: orderId },
+        data: { paymentStatus: "FAILED", status: "CANCELLED" },
+        include,
+      });
+    });
+
+    return toOrder(row);
+  },
+
+  /** Look up our order by the Razorpay order id stored on Payment.providerPaymentId. */
+  findByRazorpayOrderId: async (razorpayOrderId: string): Promise<Order | undefined> => {
+    const payment = await prisma.payment.findFirst({
+      where: { providerPaymentId: razorpayOrderId, provider: "razorpay" },
+      include: { order: { include } },
+    });
+    return payment?.order ? toOrder(payment.order as OrderRow) : undefined;
   },
 };

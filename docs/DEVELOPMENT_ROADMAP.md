@@ -288,21 +288,22 @@ migrations are finalized against a hosted database.
   admin changed a real order's status to "confirmed," and the customer's
   own order history and detail page immediately reflected it.
 
-## Phase 9 — Payment Gateway
+## Phase 9 — Payment Gateway ✅
 
-- **Objective:** Integrate Razorpay (client's account, pending approval as
-  of Phase 7) as a real payment provider, **alongside** Cash on Delivery
-  — not replacing it. Blocked on the client providing API credentials
-  once their account is approved.
-- **Backend:** `apps/api/src/modules/payments` implements intent creation
-  and webhook verification, updates `Payment`/`Order.paymentStatus`. In
-  `orders.service.ts`, remove the "only `cod` is accepted" guard added in
-  Phase 7 (search for the comment referencing this phase) once Razorpay
-  intent creation exists for the other payment methods.
-- **Frontend:** re-enable the disabled "Coming soon" UPI/Card/Netbanking
-  options in `routes/checkout.tsx`'s `PAYMENT_OPTIONS`.
-- **Completion criteria:** a test payment completes end-to-end in sandbox
-  mode.
+- **Objective:** Integrate Razorpay as a real payment provider, **alongside**
+  Cash on Delivery — not replacing it.
+- **Backend:** `apps/api/src/modules/payments` implements Checkout verify +
+  webhook handling, updates `Payment` / `Order.paymentStatus`. Online
+  checkout creates a Razorpay order and returns Checkout payload; COD
+  surcharge applies only for COD.
+- **Frontend:** UPI / Card / Netbanking enabled on checkout; opens Razorpay
+  Checkout, then `POST /payments/verify`.
+- **Ops:** set `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET`, and
+  `PAYMENT_WEBHOOK_SECRET` on the API; webhook URL
+  `https://rajadhaniyam-api.onrender.com/payments/webhook`
+  (events: `payment.captured`, `payment.failed`).
+- **Completion criteria:** a live payment completes end-to-end; COD still
+  works without the Razorpay modal.
 
 ## Phase 10 — Inventory ✅
 

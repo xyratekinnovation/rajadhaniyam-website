@@ -112,7 +112,7 @@ file for the full list and comments; short version:
 | `API_PORT`                                        | `apps/api`                      | Defaults to `4000`                                        |
 | `STOREFRONT_URL`, `ADMIN_URL`                     | `apps/api`                      | Used for CORS allow-list                                  |
 | `VITE_API_BASE_URL`                               | `apps/storefront`, `apps/admin` | Browser-accessible — must keep the `VITE_` prefix         |
-| `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET` | (future) `apps/api`             | Not integrated yet                                        |
+| `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET`, `PAYMENT_WEBHOOK_SECRET` | Razorpay keys (api) | Set in Render / local `.env` — never commit |
 
 `apps/storefront/.env.example` and `apps/api/.env.example` mirror the
 subset each app actually reads, since Vite/Bun read `.env` relative to each

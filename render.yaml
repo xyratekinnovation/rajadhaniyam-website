@@ -43,6 +43,8 @@ services:
         sync: false
       - key: PAYMENT_PROVIDER_SECRET
         sync: false
+      - key: PAYMENT_WEBHOOK_SECRET
+        sync: false
 
   - type: web
     name: rajadhaniyam-storefront

@@ -4,27 +4,33 @@ import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE, COD_SURCHARGE } from "@
 
 describe("calculateShipping", () => {
   test("charges standard shipping + COD surcharge below the free-shipping threshold", () => {
-    expect(calculateShipping(FREE_SHIPPING_THRESHOLD - 1)).toBe(
+    expect(calculateShipping(FREE_SHIPPING_THRESHOLD - 1, "cod")).toBe(
       STANDARD_SHIPPING_FEE + COD_SURCHARGE,
     );
   });
 
   test("waives the base shipping fee at exactly the free-shipping threshold", () => {
-    expect(calculateShipping(FREE_SHIPPING_THRESHOLD)).toBe(COD_SURCHARGE);
+    expect(calculateShipping(FREE_SHIPPING_THRESHOLD, "cod")).toBe(COD_SURCHARGE);
   });
 
   test("waives the base shipping fee above the free-shipping threshold", () => {
-    expect(calculateShipping(FREE_SHIPPING_THRESHOLD + 500)).toBe(COD_SURCHARGE);
+    expect(calculateShipping(FREE_SHIPPING_THRESHOLD + 500, "cod")).toBe(COD_SURCHARGE);
   });
 
   // The COD surcharge is a cash-handling fee, not a delivery fee — it must
   // never be waived by the free-shipping threshold, only the base fee.
-  test("COD surcharge always applies, even on free-shipping orders", () => {
-    expect(calculateShipping(999999)).toBeGreaterThanOrEqual(COD_SURCHARGE);
+  test("COD surcharge always applies for COD, even on free-shipping orders", () => {
+    expect(calculateShipping(999999, "cod")).toBeGreaterThanOrEqual(COD_SURCHARGE);
   });
 
-  test("zero subtotal still charges the surcharge and base fee", () => {
-    expect(calculateShipping(0)).toBe(STANDARD_SHIPPING_FEE + COD_SURCHARGE);
+  test("zero subtotal still charges the surcharge and base fee for COD", () => {
+    expect(calculateShipping(0, "cod")).toBe(STANDARD_SHIPPING_FEE + COD_SURCHARGE);
+  });
+
+  test("online methods omit the COD surcharge", () => {
+    expect(calculateShipping(FREE_SHIPPING_THRESHOLD - 1, "upi")).toBe(STANDARD_SHIPPING_FEE);
+    expect(calculateShipping(FREE_SHIPPING_THRESHOLD, "card")).toBe(0);
+    expect(calculateShipping(FREE_SHIPPING_THRESHOLD + 100, "netbanking")).toBe(0);
   });
 });
 
