@@ -39,6 +39,10 @@ services:
         value: https://rajadhaniyam-storefront.onrender.com
       - key: ADMIN_URL
         value: https://rajadhaniyam-admin.onrender.com
+      # Temporary: Cloudflare Workers preview origin for Phase 1B browser tests
+      # (login/cart/checkout). Remove after cutover or when preview is retired.
+      - key: EXTRA_CORS_ORIGINS
+        value: https://rajadhaniyam-storefront-preview.xyratekinnovation.workers.dev
       - key: PAYMENT_PROVIDER_KEY
         sync: false
       - key: PAYMENT_PROVIDER_SECRET

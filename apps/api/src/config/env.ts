@@ -16,6 +16,9 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().default("dev-only-insecure-secret"),
   STOREFRONT_URL: z.string().default("http://localhost:8080"),
   ADMIN_URL: z.string().default("http://localhost:4001"),
+  // Optional comma-separated extra browser origins for CORS (e.g. Cloudflare
+  // Workers preview). Does not replace STOREFRONT_URL / ADMIN_URL.
+  EXTRA_CORS_ORIGINS: z.string().optional(),
   // Razorpay Key ID / Key Secret (PAYMENT_PROVIDER_* names kept for Render/env continuity).
   PAYMENT_PROVIDER_KEY: z.string().optional(),
   PAYMENT_PROVIDER_SECRET: z.string().optional(),

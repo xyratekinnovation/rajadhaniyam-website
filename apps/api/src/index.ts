@@ -24,10 +24,18 @@ import { settingsAdminRoutes } from "./modules/settings/settings.admin.routes";
 
 const app = new Hono();
 
+const corsOrigins = [
+  env.STOREFRONT_URL,
+  env.ADMIN_URL,
+  ...(env.EXTRA_CORS_ORIGINS?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean) ?? []),
+];
+
 app.use(
   "*",
   cors({
-    origin: [env.STOREFRONT_URL, env.ADMIN_URL],
+    origin: corsOrigins,
     credentials: true,
   }),
 );
