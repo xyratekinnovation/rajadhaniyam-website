@@ -39,7 +39,7 @@ app.get("/health", (c) => c.json({ success: true, data: { status: "ok" } }));
 app.route("/auth", authRoutes);
 app.route("/products", productsRoutes);
 app.route("/categories", categoriesRoutes);
-app.route("/customers", customersRoutes);
+app.route("/admin/customers", customersRoutes);
 app.route("/cart", cartRoutes);
 app.route("/orders", ordersRoutes);
 app.route("/checkout", checkoutRoutes);

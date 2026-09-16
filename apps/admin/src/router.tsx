@@ -1,4 +1,10 @@
-import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  redirect,
+} from "@tanstack/react-router";
 import { getToken } from "@/lib/auth";
 import { LoginPage } from "./routes/login";
 import { DashboardPage } from "./routes/dashboard";
@@ -8,7 +14,8 @@ import { CategoriesListPage } from "./routes/categories/CategoriesListPage";
 import { CategoryFormPage } from "./routes/categories/CategoryFormPage";
 import { OrdersListPage } from "./routes/orders/OrdersListPage";
 import { OrderDetailPage } from "./routes/orders/OrderDetailPage";
-import { CustomersPage } from "./routes/customers";
+import { CustomersListPage } from "./routes/customers/CustomersListPage";
+import { CustomerDetailPage } from "./routes/customers/CustomerDetailPage";
 import { InventoryPage } from "./routes/inventory";
 import { CouponsPage } from "./routes/coupons";
 import { BannersPage } from "./routes/banners";
@@ -85,7 +92,12 @@ const orderDetailRoute = createRoute({
 const customersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/customers",
-  component: CustomersPage,
+  component: CustomersListPage,
+});
+const customerDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/customers/$customerId",
+  component: CustomerDetailPage,
 });
 const inventoryRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -125,6 +137,7 @@ const routeTree = rootRoute.addChildren([
   ordersRoute,
   orderDetailRoute,
   customersRoute,
+  customerDetailRoute,
   inventoryRoute,
   couponsRoute,
   bannersRoute,
