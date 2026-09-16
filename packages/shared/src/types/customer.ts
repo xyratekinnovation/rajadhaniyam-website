@@ -18,4 +18,6 @@ export type Customer = {
   email: string;
   phone?: string;
   createdAt?: string;
+  /** Present on admin customer list responses. */
+  orderCount?: number;
 };
