@@ -29,7 +29,7 @@ Cloudflare Workers preview (storefront, this       │         │
 | Production admin | https://rajadhaniyam-admin.onrender.com | Live, unaffected |
 | Production API | https://rajadhaniyam-api.onrender.com | Live — **rollback target, must stay running** |
 | Cloudflare storefront preview | https://rajadhaniyam-storefront-preview.xyratekinnovation.workers.dev | Live, currently points at Render API |
-| Cloud Run API (staging) | *(not yet created)* | Not deployed |
+| Cloud Run API (staging) | https://rajadhaniyam-api-staging-855749773400.asia-south1.run.app | Deployed, verified healthy — **but private** (org policy blocks public access, see below); not yet connected to the Cloudflare preview |
 
 ## GCP project
 
@@ -60,12 +60,12 @@ Render continues running independently as rollback throughout and after.
 - [x] Billing account linked to the project (required before any API could be enabled)
 - [x] GCP APIs enabled: Cloud Run Admin API, Cloud Build API, Artifact Registry API, Secret Manager API
 - [x] Artifact Registry Docker repository created: `rajadhaniyam-api` (asia-south1)
-- [ ] Secrets created in Secret Manager (none created — Razorpay secrets explicitly deferred; DB/JWT/session secrets not yet needed until a deploy step requires them)
+- [x] Secrets created in Secret Manager (6 of 7 — see below; `PAYMENT_WEBHOOK_SECRET` intentionally not created)
 - [x] Cloud Run API image built and pushed — see "Artifact Registry / build" section below
-- [ ] Cloud Run API deployed
-- [ ] `/health` verified on Cloud Run
-- [ ] DB connectivity verified from Cloud Run
-- [ ] Cloudflare preview repointed at Cloud Run API
+- [x] Cloud Run API deployed — service `rajadhaniyam-api-staging`, revision `rajadhaniyam-api-staging-00001-44h`
+- [x] `/health` verified on Cloud Run (200, via authenticated test request — see blocker below)
+- [x] DB connectivity verified from Cloud Run (`GET /products` returned real Supabase data)
+- [ ] Cloudflare preview repointed at Cloud Run API — **blocked, see below**
 - [ ] Manual page-by-page verification against Cloud Run
 - [ ] Performance/stability comparison vs Render
 
@@ -109,7 +109,49 @@ Render continues running independently as rollback throughout and after.
 - **Digest**: `sha256:2d2861c7f81b52cdbfa306004bfd286404f2e69f0726d5d550793905647c2568`
 - **Build ID**: `4edce21d-0ec7-4df0-8c62-29cf6f3a2d77` (2m3s, status SUCCESS)
 - **Dockerfile used**: `apps/api/Dockerfile`, unmodified, via `cloudbuild.yaml`'s explicit `-f` flag; build context = repo root
-- Not yet deployed to Cloud Run — image exists in Artifact Registry only
+
+## Cloud Run staging deployment
+
+- **Service**: `rajadhaniyam-api-staging`
+- **Region**: `asia-south1`
+- **Revision**: `rajadhaniyam-api-staging-00001-44h`
+- **Service URL**: `https://rajadhaniyam-api-staging-855749773400.asia-south1.run.app`
+- **Image**: same digest as above (`sha256:2d2861c7f81b52cdbfa306004bfd286404f2e69f0726d5d550793905647c2568`) — no rebuild
+- **Resources**: 1 vCPU, 512Mi memory, min-instances 1, max-instances 3, concurrency 80 (default), request-based CPU allocation (not always-allocated)
+- **Runtime service account**: `855749773400-compute@developer.gserviceaccount.com` (project's Compute Engine default SA)
+- **Secrets attached** (names only, mounted via `secretKeyRef` → `latest`): `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `SESSION_SECRET`, `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET`. `PAYMENT_WEBHOOK_SECRET` intentionally not created/attached (see below).
+- **Non-secret env vars**: `NODE_ENV=production`, `STOREFRONT_URL=<Cloudflare preview URL>`, `ADMIN_URL=https://rajadhaniyam-admin.onrender.com` (existing real admin URL, not invented — admin panel isn't part of this migration), `EXTRA_CORS_ORIGINS=<same Cloudflare preview URL>`
+- **Verification**: `GET /health` → 200; `GET /products` → 200 with real Supabase data (DB connectivity confirmed end-to-end); logs show clean startup on `PORT=8080` with zero Prisma or missing-env-var errors
+
+### `PAYMENT_WEBHOOK_SECRET` — why it wasn't created
+
+`apps/api/src/config/env.ts` defines it as `z.string().optional()`, so the app's
+startup validation (`envSchema.parse(process.env)`) succeeds with it unset.
+It's only read lazily inside the `/payments/webhook` route's signature check,
+which safely returns `400 Invalid webhook signature` rather than crashing
+when unset. No webhook is registered against this staging service in
+Razorpay, so there is nothing for this secret to validate yet.
+
+### ⚠️ Known blocker — org policy prevents public access
+
+`gcloud run deploy --allow-unauthenticated` **did not fully apply**. The
+`xyratek.in` GCP organization has a Domain Restricted Sharing policy
+(`constraints/iam.allowedPolicyMemberDomains`, locked to the org's own
+customer ID) that blocks granting `allUsers` access to any resource,
+org-wide — confirmed via `gcloud resource-manager org-policies describe`.
+As a result **the service is currently private**: unauthenticated requests
+get `403 Forbidden`. Verified functionality above by generating a
+short-lived `gcloud auth print-identity-token` for testing only (deleted
+immediately after use).
+
+**This blocks connecting the Cloudflare Workers preview** (Phase 8), which
+has no GCP credentials and cannot authenticate. Needs one of:
+1. An org policy exception for this specific project (requires
+   Organization Policy Administrator — may not be within
+   `monisha@xyratek.in`'s current role; worth checking)
+2. A different access pattern (signed OIDC tokens minted by the Worker, or
+   a Cloud Load Balancer + Cloud Armor in front) — meaningfully more
+   complex than a straightforward public Cloud Run service
 
 ## Tests completed
 
