@@ -925,6 +925,26 @@ Full current secret list (names only): `DATABASE_URL`, `DATABASE_URL_PRODUCTION`
 
 **Remaining blocker before Phase 13A's deploy command can run**: `PAYMENT_PROVIDER_KEY_PRODUCTION` and `PAYMENT_PROVIDER_SECRET_PRODUCTION` still need to be created by the client (Secret Manager → Create secret → paste the Razorpay LIVE Key ID/Secret) before the production Cloud Run deploy can include them. Staging, Render, Supabase, DNS, and Cloudflare remain untouched.
 
+## Phase 14 (continued): Remaining 2 production secrets populated by client (2026-09-17)
+
+Client created and populated `PAYMENT_PROVIDER_KEY_PRODUCTION` and `PAYMENT_PROVIDER_SECRET_PRODUCTION` directly in the GCP Console with real Razorpay production credentials — the assistant did not see, request, or handle these values. Client also populated `PAYMENT_WEBHOOK_SECRET_PRODUCTION` (previously created as an empty container) with a real value from the Razorpay Dashboard.
+
+Verified via `gcloud secrets versions list` (names/counts only) — **all 7 production secrets now exist with exactly 1 version each**:
+
+| Secret | Version | Notes |
+|---|---|---|
+| `DATABASE_URL_PRODUCTION` | 1 | Unchanged from earlier this phase |
+| `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION` | 1 | Unchanged |
+| `JWT_SECRET_PRODUCTION` | 1 | Unchanged |
+| `SESSION_SECRET_PRODUCTION` | 1 | Unchanged |
+| `PAYMENT_PROVIDER_KEY_PRODUCTION` | 1 | **New** — client-populated, re-checked by prefix only (`rzp_live_...`): **MODE=LIVE**, correct for production |
+| `PAYMENT_PROVIDER_SECRET_PRODUCTION` | 1 | **New** — client-populated, not independently re-checked (paired with the Key ID above by Razorpay's own design) |
+| `PAYMENT_WEBHOOK_SECRET_PRODUCTION` | 1 | **New** — client-populated from an already-registered Razorpay webhook |
+
+**Open question raised back to the client**: a populated `PAYMENT_WEBHOOK_SECRET_PRODUCTION` implies a webhook has already been registered on Razorpay's side, but production Cloud Run doesn't exist yet — there is no production URL for a webhook to call. Asked the client which URL that webhook currently points at (e.g. the existing Render production URL already documented in `docs/DEPLOYMENT.md`, or a not-yet-live Cloud Run URL) so this document and the cutover plan can reflect the real state. **Not yet answered as of this entry.**
+
+**All 7 production secrets are now populated.** The Phase 13A production Cloud Run deploy command is technically unblocked on the secrets front — deployment itself still requires explicit client approval before executing, per standing process.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
