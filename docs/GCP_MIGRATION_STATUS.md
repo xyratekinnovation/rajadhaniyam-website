@@ -658,13 +658,23 @@ This section committed and pushed to `migration/cloudflare-storefront` only — 
 
 Read-only verification and planning only. `rajadhaniyam.com` was not touched, inspected, or referenced in any check this phase. No DNS, Cloudflare, Cloud Run, Render, Supabase, or Razorpay changes were made.
 
-### A. Supabase staging vs. production — **UNKNOWN / NOT VERIFIABLE (stop)**
+### A. Supabase staging vs. production — **RESOLVED: 1. SAME PROJECT**
 
-The client's message referenced a "USER-PROVIDED VERIFICATION" step but did not actually include the Render production Supabase project reference in this message — no value was provided to compare against staging's `okoalheebdrszwkiombn`.
+The client provided Render production's `DATABASE_URL` directly in chat. Only the non-secret project reference was extracted for comparison — the password portion is never repeated below or anywhere else in this document.
 
-**Classification: 3. UNKNOWN / NOT VERIFIABLE.**
+- Render production project ref: `okoalheebdrszwkiombn`
+- Staging project ref (Phase 11B): `okoalheebdrszwkiombn`
+- **Identical.** Region also matches (`aws-0-ap-northeast-2.pooler.supabase.com`, Seoul).
 
-Per instructions, the Supabase same/different-project analysis stops here. **What's still required**: the Supabase project reference used by Render production's `DATABASE_URL` (the `<ref>` segment in `postgres.<ref>@...` — not the full connection string, not the password). This can be read directly from the Render dashboard's environment variables, or from the Supabase project's own dashboard URL if you know which project is linked to production. No Render/Supabase access exists in this session to determine it independently.
+**Classification: 1. SAME PROJECT.**
+
+**Staging and Render production share the same Supabase project/database.** There are not two separate databases today — Cloud Run staging has been reading from and writing to the actual production database this entire time.
+
+**Operational consequence**: every write made while testing staging (product/order reads are harmless, but any register/login/cart/checkout/order-creation test) creates or modifies real rows in the same database the live Render production site uses. Stock decrements, customer accounts, and orders created during staging tests are indistinguishable from real production activity at the database level.
+
+**Did staging's existing test activity touch production data?** Yes, confirmed: the COD test order placed during Phase 8 verification (order `#RJD32963552`, ₹264) was written directly to this shared production database — it was manually cleaned up immediately after (stock restored, order and test customer deleted, as reported in Phase 8), but it confirms the risk described above was real, not hypothetical, for that one test. No further cleanup or data changes were made in this phase — this section is a finding only, per instructions.
+
+**A note on the credential itself**: the message containing this `DATABASE_URL` included the plaintext database password. It hasn't been repeated anywhere in this session's outputs or in this document, but since it's now present in this conversation's history, rotating that Supabase database password at some point (Supabase dashboard → Database → Reset password) would be reasonable hygiene — not urgent, and not something changed here.
 
 ### B. `SUPABASE_URL` gap — **SUPABASE_URL REQUIRED**
 
@@ -696,23 +706,27 @@ Re-checked via the same prefix-only method as Phase 9B (no value printed): `PAYM
 | `PAYMENT_WEBHOOK_SECRET_PRODUCTION` | Yes, once the production webhook is registered | Razorpay Dashboard, generated when the webhook is created | Not needed until Phase 11H/cutover step 8 |
 | `SUPABASE_URL_PRODUCTION` (non-secret today, but listed for completeness) | Yes, per B | Client — production Supabase project URL | Currently missing from staging entirely; should not be skipped for production |
 
-**None of these have been created.** Explicitly confirmed: **staging's existing secrets (`DATABASE_URL`, `PAYMENT_PROVIDER_KEY`, etc.) will not be reused as production secret objects** — production gets entirely separate Secret Manager entries under the `_PRODUCTION` names above, with no shared IAM bindings or version history. The only scenario where reuse would ever make sense is if Supabase turns out to be a genuinely shared project (per A, still unknown) — and even then, the recommendation remains separate secret *objects* in Secret Manager (pointing at the same underlying database if that's confirmed intentional), not literally reusing the staging secret resource.
+**None of these have been created.** Explicitly confirmed: **staging's existing secrets (`DATABASE_URL`, `PAYMENT_PROVIDER_KEY`, etc.) will not be reused as production secret objects** — production gets entirely separate Secret Manager entries under the `_PRODUCTION` names above, with no shared IAM bindings or version history, even though A/E confirmed Supabase is a genuinely shared project: `DATABASE_URL_PRODUCTION` would be its own secret *object*, populated with the same underlying connection string if sharing continues, not a literal reuse of the staging secret resource. This keeps IAM/access and version history independent even where the underlying data isn't.
 
-### E. Production database safety — pending A
+### E. Production database safety — SAME PROJECT (confirmed in A)
 
-Since A is UNKNOWN, this section documents both branches without committing to either yet:
+Production and staging must be treated as **environments sharing one database**, not as isolated environments.
 
-**If SAME PROJECT** (once confirmed): production and staging must be treated as environments sharing one database. Risks: any staging test (orders, stock decrements, customer records — as already happened once in Phase 8, cleaned up manually) writes directly to production data; future Razorpay TEST-mode testing would do the same. Before cutover, would need: an explicit decision on whether to keep sharing (accepting the operational risk and cleanup discipline already demonstrated) or migrate staging to its own project. No database created, no schema changed, no migration run.
+**Application-level risks**:
+- Any future staging test (including the still-deferred Razorpay TEST-mode payment testing) writes directly into production's `Order`, `Payment`, `OrderItem`, `User`, and `ProductVariant`(stock) rows — same as the Phase 8 COD test order.
+- There is no technical safeguard preventing this — the app has no environment-tagging on data, so a staging-created order is indistinguishable from a real customer order in the database itself, discoverable only by manual review (order number, customer email, timing).
+- `DATABASE_URL_PRODUCTION` (per the secrets plan in D) would, if populated with this same connection string, point the eventual production Cloud Run service at the identical database staging already uses — meaning "staging" and "production" become two deployments of the same data, not two environments.
 
-**If DIFFERENT PROJECT** (once confirmed): document as the clean, already-separated architecture — production's `DATABASE_URL_PRODUCTION`/`SUPABASE_SERVICE_ROLE_KEY_PRODUCTION`/`SUPABASE_URL_PRODUCTION` simply point at the production Supabase project's own values, entered by the client. No cross-environment risk. Nothing to create or change.
-
-**Action needed to resolve**: the Render production Supabase project reference (see A).
+**What must be verified/decided before cutover**:
+1. **Explicit decision**: continue deliberately sharing one Supabase project between staging and production (accepting the cleanup discipline already demonstrated in Phase 8, and applying the same discipline to any remaining staging testing, including final-QA Razorpay TEST payments), **or** provision a separate Supabase project for staging before further testing.
+2. If sharing continues: every future staging test (especially the deferred Razorpay TEST payment/failure/cancel tests in Phase 9D/E) must be followed by the same manual cleanup pattern already proven — restore stock, delete test order/customer — since there is no automatic separation.
+3. No database was created, no schema changed, no migration run, no data modified in this phase — this is a finding and a decision point, not an action taken.
 
 ### F. Final pre-cutover checklist
 
 | # | Category | Status | Notes |
 |---|---|---|---|
-| 1 | Supabase | **BLOCKED** | Same/different-project question unresolved (A) — resolve before finalizing production secrets/architecture |
+| 1 | Supabase | REQUIRES USER ACTION | Confirmed SAME PROJECT as production (A/E) — decide whether to keep sharing or provision a separate staging project before further testing |
 | 2 | Cloud Run production | REQUIRES USER ACTION | Design finalized (Phase 11C), not deployed — awaiting go-ahead |
 | 3 | Production secrets | REQUIRES USER ACTION | Plan finalized (D above), none created — values must come from the client |
 | 4 | Cloudflare production Worker | REQUIRES USER ACTION | Design finalized (Phase 11E), not deployed |
