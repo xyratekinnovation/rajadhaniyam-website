@@ -12,9 +12,16 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  // Deploying to Render (a persistent Node/Bun process), not Cloudflare —
-  // pin Nitro's output to a plain Node server instead of the cloudflare-module default.
+  // Phase 1 Cloudflare preview: pin Nitro to Workers module output.
+  // Confirmed against @lovable.dev/vite-tanstack-config@2.15.0 (defaultPreset /
+  // LOVABLE_NITRO_PRESETS) and nitro@3.0.260603-beta PresetName = "cloudflare-module".
+  // deployConfig generates wrangler.json; nodeCompat enables nodejs_compat for Start/h3.
+  // Production Render (master) still uses node-server — this branch is preview-only.
   nitro: {
-    preset: "node-server",
+    preset: "cloudflare-module",
+    cloudflare: {
+      deployConfig: true,
+      nodeCompat: true,
+    },
   },
 });
