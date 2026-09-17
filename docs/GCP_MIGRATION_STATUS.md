@@ -1017,12 +1017,59 @@ Not needed — deployment succeeded cleanly on the first attempt. No changes mad
 
 ### Remaining blockers
 
-1. **`SUPABASE_URL` still not set on production** (or staging) — admin image uploads will fail until added (`gcloud run services update rajadhaniyam-api-production --update-env-vars=SUPABASE_URL=https://okoalheebdrszwkiombn.supabase.co`, not yet run, needs approval).
+1. ~~`SUPABASE_URL` still not set on production~~ — **resolved in Phase 15, see below.** Still not set on staging (unchanged, out of scope for this phase).
 2. **Production Razorpay webhook still points at the wrong service** (`rajadhaniyam-storefront.onrender.com` instead of the API) — client's action, not blocking checkout today.
 3. Production Cloud Run is deployed but **carries zero live customer traffic** — nothing points at it yet (no DNS, no Cloudflare Worker attached). It shares the same production Supabase database as staging and Render, so it's now a third consumer of that same data — harmless for reads, same shared-database caution applies to any future write-path testing against it.
 4. Cloudflare production Worker and DNS cutover remain fully out of scope, exactly as instructed — not started.
 
 Render, `rajadhaniyam.com`, Supabase, DNS, Cloudflare, and Razorpay configuration are all unchanged by this phase.
+
+## Phase 15: `SUPABASE_URL` added to production Cloud Run (2026-09-17)
+
+Single-variable change, exactly as scoped — no other env var, secret, DNS, Cloudflare, Render, Supabase, or Razorpay change made.
+
+### A. Value verification
+
+The value was **not guessed**. `SUPABASE_URL` for a Supabase project follows the fixed pattern `https://<project-ref>.supabase.co`; for project ref `okoalheebdrszwkiombn` (confirmed shared by staging/production in Phase 12A) that gives `https://okoalheebdrszwkiombn.supabase.co`. This was verified live and read-only: `GET https://okoalheebdrszwkiombn.supabase.co/rest/v1/` (no credentials sent) returned Supabase's standard `401 {"message":"No API key found in request", ...}` — the standard signature of a real, reachable Supabase project, not a DNS failure or unrelated host. No secret values involved or exposed.
+
+### B. Applied
+
+```
+gcloud run services update rajadhaniyam-api-production \
+  --region=asia-south1 --project=xyratek-websites \
+  --update-env-vars=SUPABASE_URL=https://okoalheebdrszwkiombn.supabase.co
+```
+Used `--update-env-vars` (additive) rather than `--set-env-vars` (replaces the whole list) specifically so no existing env var or secret reference could be touched.
+
+### C. Verification
+
+1. **New revision created**: `rajadhaniyam-api-production-00002-28t` (previous: `-00001-wkk`).
+2. **Ready**: `status.conditions` — `Ready: True`, `ConfigurationsReady: True`, `RoutesReady: True`. Cloud Audit Log confirms: `"Ready condition status changed to True for Revision rajadhaniyam-api-production-00002-28t ... Deploying revision succeeded in 5.46s"`.
+3. **Public access intact**: `run.googleapis.com/invoker-iam-disabled` still `true` — untouched by this update.
+4. **Env var list after the change** (names only): `NODE_ENV`, `STOREFRONT_URL`, `ADMIN_URL`, `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `SESSION_SECRET`, `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET`, **`SUPABASE_URL`** (new) — every previously existing entry confirmed still present, nothing removed or altered.
+
+**Smoke tests** (all against the new revision, 100% traffic):
+
+| Endpoint | Status | Result |
+|---|---|---|
+| `GET /health` | 200 | `{"success":true,"data":{"status":"ok"}}` |
+| `GET /products` | 200 | Real product data, unchanged from pre-update |
+| `GET /categories` | 200 | Real category data, unchanged |
+
+No write/upload test performed, per instructions.
+
+**Logs** (this revision, verification window, via Cloud Logging REST API — `gcloud logging read` hit a local Windows CLI quoting bug unrelated to Cloud Run, same workaround as Phase 14): 12 entries — 6 `INFO` (the 3 smoke-test requests + routine logging), 4 `WARNING`/404 (benign — a browser directly opened `GET /` and `GET /favicon.ico` on the raw `*.a.run.app` URL; the API has no such routes, so 404 is correct, expected behavior, not an error), 1 `NOTICE` deploy-succeeded audit entry. **Zero startup errors, zero missing-env-var errors, zero Supabase/Prisma/database errors, zero 5xx responses.**
+
+### D. Confirmed unchanged
+
+No database, data, DNS, Cloudflare, Render, or Razorpay changes occurred as part of this phase. `DATABASE_URL_PRODUCTION`, `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION`, `JWT_SECRET_PRODUCTION`, `SESSION_SECRET_PRODUCTION`, both Razorpay production secrets, `STOREFRONT_URL`, `ADMIN_URL`, and CORS configuration are all exactly as they were after Phase 14.
+
+### Remaining blockers
+
+1. Production Razorpay webhook still misconfigured (client's action — unchanged from Phase 14).
+2. `SUPABASE_URL` still not set on **staging** — out of scope for this phase, staging config unchanged.
+3. No admin image-upload write test has been performed anywhere (staging or production) — deferred, since any such test would write real data to the shared production database/storage.
+4. Cloudflare production Worker and DNS cutover remain untouched, exactly as instructed.
 
 ## Safety restrictions (standing, for every future session on this migration)
 
