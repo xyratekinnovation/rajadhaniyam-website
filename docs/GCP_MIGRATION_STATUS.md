@@ -654,6 +654,78 @@ Same as Phase 10G, reconfirmed: Worker-level rollback (repoint `VITE_API_BASE_UR
 
 This section committed and pushed to `migration/cloudflare-storefront` only — not merged to `master`.
 
+## Phase 12: Supabase/Razorpay verification, production secrets plan, pre-cutover checklist (2026-09-17)
+
+Read-only verification and planning only. `rajadhaniyam.com` was not touched, inspected, or referenced in any check this phase. No DNS, Cloudflare, Cloud Run, Render, Supabase, or Razorpay changes were made.
+
+### A. Supabase staging vs. production — **UNKNOWN / NOT VERIFIABLE (stop)**
+
+The client's message referenced a "USER-PROVIDED VERIFICATION" step but did not actually include the Render production Supabase project reference in this message — no value was provided to compare against staging's `okoalheebdrszwkiombn`.
+
+**Classification: 3. UNKNOWN / NOT VERIFIABLE.**
+
+Per instructions, the Supabase same/different-project analysis stops here. **What's still required**: the Supabase project reference used by Render production's `DATABASE_URL` (the `<ref>` segment in `postgres.<ref>@...` — not the full connection string, not the password). This can be read directly from the Render dashboard's environment variables, or from the Supabase project's own dashboard URL if you know which project is linked to production. No Render/Supabase access exists in this session to determine it independently.
+
+### B. `SUPABASE_URL` gap — **SUPABASE_URL REQUIRED**
+
+Traced every reference in the codebase:
+- `apps/api/src/config/env.ts:13-14` — both `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are declared `z.string().optional()` (app boots fine without either).
+- `apps/api/src/modules/uploads/storage.ts` — the **only** place either is used. `requireSupabaseConfig()` (lines 9-17) throws `HttpError(503, "Image upload isn't configured — SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY missing")` unless **both** are set — the service-role key alone is not sufficient, since every Storage REST call (`ensureBucketExists`, `uploadFile`) builds its request URL as `` `${url}/storage/v1/...` `` directly from `SUPABASE_URL`. Talks to Supabase Storage's raw REST API, not the `@supabase/supabase-js` SDK (deliberate, per the file's own comment).
+- No other file in `apps/api` references `SUPABASE_URL`.
+- **Frontend**: no match for `supabase`/`SUPABASE_URL` anywhere in `apps/storefront` — the client never talks to Supabase directly, confirming the architecture is strictly storefront → API → Supabase.
+- **Database connection**: `packages/database/prisma/schema.prisma:19-20` — `url = env("DATABASE_URL")`, `directUrl = env("DIRECT_URL")`. `DATABASE_URL` (pooled) is the sole runtime DB connection; `DATABASE_URL` is the only one of the two Cloud Run actually needs at runtime (`DIRECT_URL` is for migrations, not used by the running app).
+
+**Conclusion**: `SUPABASE_URL` is not needed for the database or for core storefront/checkout/order functionality (all of that goes through `DATABASE_URL`/Prisma), but it **is required for admin product-image uploads to work at all** — without it, that one feature fails with a 503, everything else keeps working. Since staging currently has it unset (confirmed via `gcloud run services describe` in Phase 11), **image upload is presumably broken on staging right now** — not tested directly in this phase (would require an admin-panel write action, out of scope for read-only verification) but a direct consequence of the missing config. **Production should include `SUPABASE_URL`** if admin image uploads are expected to work.
+
+### C. Staging Razorpay safety — **LIVE**
+
+Re-checked via the same prefix-only method as Phase 9B (no value printed): `PAYMENT_PROVIDER_KEY` on staging is still **LIVE**, unchanged since Phase 9B/10/11.
+
+**Staging Razorpay payment testing must NOT be performed until this is changed to a TEST-mode key.** Not changed by the assistant — this remains the client's action to take (Razorpay Dashboard → Test Mode → API Keys → new secret version in Secret Manager, per the Phase 9 report).
+
+### D. Production secrets plan
+
+| Secret name | Required by production? | Source | Notes |
+|---|---|---|---|
+| `DATABASE_URL_PRODUCTION` | Yes | Client — production Supabase pooled connection string | Must include `?pgbouncer=true` (see "Known issues" above — a real bug hit earlier in this project) |
+| `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION` | Yes, if image upload is needed | Client — production Supabase project's service role key | Paired with the URL below; both required together per B |
+| `JWT_SECRET_PRODUCTION` | Yes | Generated fresh (do not reuse staging's) | Auth token signing |
+| `SESSION_SECRET_PRODUCTION` | Yes | Generated fresh (do not reuse staging's) | Session signing |
+| `PAYMENT_PROVIDER_KEY_PRODUCTION` | Yes | Client — Razorpay **LIVE** Key ID | Only entered once production cutover is actually imminent, never before |
+| `PAYMENT_PROVIDER_SECRET_PRODUCTION` | Yes | Client — Razorpay **LIVE** Key Secret | Same timing caution as above |
+| `PAYMENT_WEBHOOK_SECRET_PRODUCTION` | Yes, once the production webhook is registered | Razorpay Dashboard, generated when the webhook is created | Not needed until Phase 11H/cutover step 8 |
+| `SUPABASE_URL_PRODUCTION` (non-secret today, but listed for completeness) | Yes, per B | Client — production Supabase project URL | Currently missing from staging entirely; should not be skipped for production |
+
+**None of these have been created.** Explicitly confirmed: **staging's existing secrets (`DATABASE_URL`, `PAYMENT_PROVIDER_KEY`, etc.) will not be reused as production secret objects** — production gets entirely separate Secret Manager entries under the `_PRODUCTION` names above, with no shared IAM bindings or version history. The only scenario where reuse would ever make sense is if Supabase turns out to be a genuinely shared project (per A, still unknown) — and even then, the recommendation remains separate secret *objects* in Secret Manager (pointing at the same underlying database if that's confirmed intentional), not literally reusing the staging secret resource.
+
+### E. Production database safety — pending A
+
+Since A is UNKNOWN, this section documents both branches without committing to either yet:
+
+**If SAME PROJECT** (once confirmed): production and staging must be treated as environments sharing one database. Risks: any staging test (orders, stock decrements, customer records — as already happened once in Phase 8, cleaned up manually) writes directly to production data; future Razorpay TEST-mode testing would do the same. Before cutover, would need: an explicit decision on whether to keep sharing (accepting the operational risk and cleanup discipline already demonstrated) or migrate staging to its own project. No database created, no schema changed, no migration run.
+
+**If DIFFERENT PROJECT** (once confirmed): document as the clean, already-separated architecture — production's `DATABASE_URL_PRODUCTION`/`SUPABASE_SERVICE_ROLE_KEY_PRODUCTION`/`SUPABASE_URL_PRODUCTION` simply point at the production Supabase project's own values, entered by the client. No cross-environment risk. Nothing to create or change.
+
+**Action needed to resolve**: the Render production Supabase project reference (see A).
+
+### F. Final pre-cutover checklist
+
+| # | Category | Status | Notes |
+|---|---|---|---|
+| 1 | Supabase | **BLOCKED** | Same/different-project question unresolved (A) — resolve before finalizing production secrets/architecture |
+| 2 | Cloud Run production | REQUIRES USER ACTION | Design finalized (Phase 11C), not deployed — awaiting go-ahead |
+| 3 | Production secrets | REQUIRES USER ACTION | Plan finalized (D above), none created — values must come from the client |
+| 4 | Cloudflare production Worker | REQUIRES USER ACTION | Design finalized (Phase 11E), not deployed |
+| 5 | `rajadhaniyam.in` DNS | REQUIRES USER ACTION | Domain registered, no records yet — needs active GoDaddy→Cloudflare nameserver change when ready (Phase 11A/F) |
+| 6 | Razorpay | **BLOCKED** | Staging still on LIVE credentials (C above) — must move to TEST before any payment testing; production LIVE keys not needed until actual cutover |
+| 7 | Final application QA | REQUIRES USER ACTION | Checklist exists (Phase 10I), not yet executed against production (production doesn't exist yet) |
+| 8 | Rollback | READY | Plan documented and proven in pattern (Phase 8's Worker-var rollback), Render untouched and running |
+| 9 | Client handover | REQUIRES USER ACTION | Documentation checklist exists (Phase 10J), materials not yet assembled |
+
+### G. Documentation
+
+This section committed and pushed to `migration/cloudflare-storefront` only — not merged to `master`. No application code modified this phase (docs-only change, as instructed).
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
