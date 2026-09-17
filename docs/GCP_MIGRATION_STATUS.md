@@ -9,6 +9,8 @@ architecture, URLs, variable names, and status.
 Branch: `migration/cloudflare-storefront`
 Do not merge into `master` without explicit approval.
 
+> **Domain correction (2026-09-17, Phase 17)**: `rajadhaniyam.in` is confirmed as the **only** production domain for this project. `rajadhaniyam.com`, mentioned in several places below, is a real but entirely unrelated third-party domain — it is **not** owned by the client and has **no connection** to Rajadhaniyam. It surfaces in this document only because earlier phases (before `.in` was purchased) mistakenly assumed `.com` as a placeholder future domain, and because it was investigated in Phase 11 purely to avoid confusing it with `.in` during DNS work. Historical phase reports below that mention `.com` reflect that investigation accurately and are left as-is; treat every one of them as "an unrelated domain, not ours, never touched" — not as part of this project's architecture.
+
 ## Current architecture (before this migration)
 
 ```
@@ -1181,8 +1183,8 @@ Not needed — build and deploy both succeeded on the first attempt, no errors a
 
 - Do not merge into `master`/`main`.
 - Do not modify or delete the existing Cloudflare preview deployment.
-- Do not modify production DNS (this covers `rajadhaniyam.in`, the confirmed project domain, once it's live).
-- **`rajadhaniyam.com` is NOT this project's domain — it belongs to a separate, unrelated site with active GoDaddy email (MX/SPF). Never modify its DNS, hosting, or email under any circumstance, even by analogy/pattern-matching from `rajadhaniyam.in` work.**
+- Do not modify production DNS (this covers `rajadhaniyam.in`, the confirmed and only project domain, once it's live).
+- **`rajadhaniyam.com` has no connection to this project — it is not owned by the client and is not part of Rajadhaniyam's architecture in any way.** It happens to be a real, independently-registered domain with its own unrelated GoDaddy website and email, discovered incidentally while confirming the correct project domain in Phase 11 — noted here only so it is never confused with `rajadhaniyam.in`, never referenced in this project's DNS/Cloudflare/Worker/CORS/env-var configuration, and never touched. It is not a Rajadhaniyam asset to track, compare against, or protect as "ours."
 - Do not modify the production Cloudflare deployment.
 - Do not change the production Razorpay webhook, or create any webhook against the Cloud Run staging service.
 - Do not use production Razorpay credentials in Cloud Run staging — test-mode keys only.

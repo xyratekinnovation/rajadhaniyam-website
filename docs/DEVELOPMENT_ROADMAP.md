@@ -448,6 +448,6 @@ migrations are finalized against a hosted database.
 - **Backend/Database:** hosted Postgres, `apps/api` deployed behind HTTPS.
 - **Frontend/Admin:** `apps/storefront` (SSR) and `apps/admin` (static)
   deployed, environment variables set from `.env.example`.
-- **Completion criteria:** rajadhaniyam.com serves the storefront, a
+- **Completion criteria:** rajadhaniyam.in serves the storefront, a
   separate admin subdomain serves the dashboard, both talk to the deployed
   API.

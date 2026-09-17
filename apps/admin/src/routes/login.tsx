@@ -40,7 +40,7 @@ export function LoginPage() {
           label="Email"
           htmlFor="email"
           type="email"
-          placeholder="admin@rajadhaniyam.com"
+          placeholder="admin@rajadhaniyam.in"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}

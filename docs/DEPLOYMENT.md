@@ -82,11 +82,11 @@ on each service to match reality:
 
 ## Custom domain
 
-Once `rajadhaniyam.com` (or whatever domain is chosen) is ready to point at
+Once `rajadhaniyam.in` (the project's production domain) is ready to point at
 Render: Render dashboard → service → Settings → Custom Domains → follow the
 DNS instructions (usually a CNAME to the `.onrender.com` host). Do this for
 the storefront service; the admin can stay on a subdomain
-(`admin.rajadhaniyam.com`) or the default `.onrender.com` URL since it's
+(`admin.rajadhaniyam.in`) or the default `.onrender.com` URL since it's
 internal-only.
 
 ## Platform-specific gotchas fixed for this deploy
