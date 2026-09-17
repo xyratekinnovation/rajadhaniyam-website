@@ -29,7 +29,7 @@ Cloudflare Workers preview (storefront, this       │         │
 | Production admin | https://rajadhaniyam-admin.onrender.com | Live, unaffected |
 | Production API | https://rajadhaniyam-api.onrender.com | Live — **rollback target, must stay running** |
 | Cloudflare storefront preview | https://rajadhaniyam-storefront-preview.xyratekinnovation.workers.dev | Live, currently points at Render API |
-| Cloud Run API (staging) | https://rajadhaniyam-api-staging-855749773400.asia-south1.run.app | Deployed, verified healthy — **but private** (org policy blocks public access, see below); not yet connected to the Cloudflare preview |
+| Cloud Run API (staging) | https://rajadhaniyam-api-staging-855749773400.asia-south1.run.app | Deployed, **publicly reachable** (via `--no-invoker-iam-check`, no org policy changed — see below), verified healthy; not yet connected to the Cloudflare preview |
 
 ## GCP project
 
@@ -65,7 +65,8 @@ Render continues running independently as rollback throughout and after.
 - [x] Cloud Run API deployed — service `rajadhaniyam-api-staging`, revision `rajadhaniyam-api-staging-00001-44h`
 - [x] `/health` verified on Cloud Run (200, via authenticated test request — see blocker below)
 - [x] DB connectivity verified from Cloud Run (`GET /products` returned real Supabase data)
-- [ ] Cloudflare preview repointed at Cloud Run API — **blocked, see below**
+- [x] Public-access blocker resolved (`--no-invoker-iam-check`, no org policy changed — see below)
+- [ ] Cloudflare preview repointed at Cloud Run API — not blocked anymore, pending explicit approval for this next phase
 - [ ] Manual page-by-page verification against Cloud Run
 - [ ] Performance/stability comparison vs Render
 
@@ -132,26 +133,48 @@ which safely returns `400 Invalid webhook signature` rather than crashing
 when unset. No webhook is registered against this staging service in
 Razorpay, so there is nothing for this secret to validate yet.
 
-### ⚠️ Known blocker — org policy prevents public access
+### Public access — RESOLVED via `--no-invoker-iam-check` (no org policy changed)
 
-`gcloud run deploy --allow-unauthenticated` **did not fully apply**. The
-`xyratek.in` GCP organization has a Domain Restricted Sharing policy
-(`constraints/iam.allowedPolicyMemberDomains`, locked to the org's own
-customer ID) that blocks granting `allUsers` access to any resource,
-org-wide — confirmed via `gcloud resource-manager org-policies describe`.
-As a result **the service is currently private**: unauthenticated requests
-get `403 Forbidden`. Verified functionality above by generating a
-short-lived `gcloud auth print-identity-token` for testing only (deleted
-immediately after use).
+`gcloud run deploy --allow-unauthenticated` initially **did not fully
+apply**: the `xyratek.in` GCP organization has a Domain Restricted Sharing
+policy (`constraints/iam.allowedPolicyMemberDomains`, locked to the org's
+own customer ID) that blocks granting `allUsers` as an IAM policy binding
+on any resource, org-wide. The service was private (`403 Forbidden` on
+unauthenticated requests) until this was resolved.
 
-**This blocks connecting the Cloudflare Workers preview** (Phase 8), which
-has no GCP credentials and cannot authenticate. Needs one of:
-1. An org policy exception for this specific project (requires
-   Organization Policy Administrator — may not be within
-   `monisha@xyratek.in`'s current role; worth checking)
-2. A different access pattern (signed OIDC tokens minted by the Worker, or
-   a Cloud Load Balancer + Cloud Armor in front) — meaningfully more
-   complex than a straightforward public Cloud Run service
+**Investigation** (read-only, no changes) found a separate mechanism that
+doesn't touch that policy at all: `constraints/run.managed.requireInvokerIam`
+(a Cloud Run "managed constraint", queried via the Org Policy V2 API —
+required first enabling `orgpolicy.googleapis.com` on the project, an API
+enablement, not a policy change) has an **effective value of `enforce:
+false`** on this project. That constraint governs whether Cloud Run
+services are *allowed* to disable their own invoker-IAM-check; since it's
+not enforced, they are. Unlike `--allow-unauthenticated`, disabling the
+invoker check via `--no-invoker-iam-check` adds **no `allUsers` IAM
+binding** — it's a separate, IAM-binding-free access-control mechanism, so
+it never triggers Domain Restricted Sharing.
+
+**Change applied** (2026-09-17):
+```
+gcloud run services update rajadhaniyam-api-staging \
+  --region=asia-south1 --project=xyratek-websites \
+  --no-invoker-iam-check
+```
+This updated the existing service's metadata only — **no new revision was
+created** (`latestCreatedRevisionName` stayed `rajadhaniyam-api-staging-00001-44h`
+throughout), and the container image/digest is unchanged.
+
+**Verification performed**:
+- `GET /health` externally, no auth header → `200 {"success":true,"data":{"status":"ok"}}`
+- `GET /products` externally, no auth header → `200`, real Supabase product data
+- Cloud Run logs: clean — no auth, startup, Prisma, or runtime errors; only the request log lines (including the earlier `403`s from before the change, for contrast)
+- `gcloud run services describe`: confirmed CPU=1, memory=512Mi, min-instances=1, max-instances=3, concurrency=80, no always-allocated-CPU annotation, same revision, same image digest — all unchanged from the original deployment
+- `gcloud run services get-iam-policy`: still an **empty policy** (`etag: ACAB`, no bindings) — confirms no `allUsers` binding exists; public access came entirely from the invoker-check-disable mechanism
+- `iam.allowedPolicyMemberDomains` re-checked after the change: still `allowedValues: [C014947ex]`, byte-for-byte identical to before — **org policy was never touched**
+
+**Still not done**: the Cloudflare Workers preview has not been repointed
+at this URL yet (`VITE_API_BASE_URL` unchanged) — that's the explicit next
+phase, pending separate approval.
 
 ## Tests completed
 
