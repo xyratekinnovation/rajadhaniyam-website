@@ -1071,6 +1071,112 @@ No database, data, DNS, Cloudflare, Render, or Razorpay changes occurred as part
 3. No admin image-upload write test has been performed anywhere (staging or production) — deferred, since any such test would write real data to the shared production database/storage.
 4. Cloudflare production Worker and DNS cutover remain untouched, exactly as instructed.
 
+## Phase 16: Production Cloudflare Worker created and deployed (2026-09-17)
+
+Worker-only phase — no custom domain attached, no DNS/GoDaddy/Cloudflare-DNS change, no Render/Supabase/Razorpay change, preview Worker untouched, no write-path testing (staging and production share one Supabase database, per the standing Phase 12A warning).
+
+### A. Inspected existing config / what must differ
+
+- `apps/storefront/wrangler.json` (preview, unmodified throughout this phase): `{"name": "rajadhaniyam-storefront-preview", "compatibility_date": "2024-09-19", "compatibility_flags": ["nodejs_compat"], "workers_dev": true}`.
+- Build pipeline: `vite.config.ts` pins Nitro's `cloudflare-module` preset with `deployConfig: true` — at build time, Nitro reads the project's `wrangler.json` (name + compat settings) and **merges it with build-generated fields** (`main`, `assets`, `no_bundle`, `rules`) into a new, complete file at `.output/server/wrangler.json`. This generated file — not the minimal checked-in one — is what actually gets deployed; it's gitignored/build-only.
+- `VITE_ADMIN_URL`: traced to `apps/storefront/src/lib/admin-url.ts` (`import.meta.env["VITE_ADMIN_URL"] ?? "http://localhost:4001"`), a pure Vite build-time var exactly like `VITE_API_BASE_URL`. Production value determined from existing architecture (admin stays on Render, confirmed in Phase 13B): **`https://rajadhaniyam-admin.onrender.com`** — not guessed, it's the same real URL already used by staging/Render.
+- What must differ for production: Worker name, `VITE_API_BASE_URL` (→ production Cloud Run), `VITE_ADMIN_URL` (same value as staging, both point at the one real Render admin). What stays identical: build command, compatibility settings, `workers_dev: true` (temporary URL only, no custom domain).
+
+### B. Production Wrangler config created
+
+`apps/storefront/wrangler.production.json` (new file, committed):
+```json
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rajadhaniyam-storefront-production",
+  "compatibility_date": "2024-09-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true
+}
+```
+`apps/storefront/wrangler.json` (preview) was **never read, written, or repurposed** at any point in this phase.
+
+**Note on how the deploy actually ran**: because Nitro's `deployConfig` always sources its build-time merge from the project's own `wrangler.json` (not a configurable path), the generated `.output/server/wrangler.json` after a production build still carries `"name": "rajadhaniyam-storefront-preview"` — confirmed by inspection. Rather than risk corrupting the checked-in preview config by swapping its contents pre-build, the deploy used Wrangler's own `--name` CLI override (`wrangler deploy --config .output/server/wrangler.json --name rajadhaniyam-storefront-production`), which targets the correct Worker while using the proven, correctly-generated `main`/`assets`/`rules` fields from the real build output. `wrangler.production.json` remains the canonical reference for this Worker's identity/settings; it isn't consumed directly by the build tooling given this project's Nitro configuration.
+
+### C. Build
+
+```
+VITE_API_BASE_URL=https://rajadhaniyam-api-production-855749773400.asia-south1.run.app \
+VITE_ADMIN_URL=https://rajadhaniyam-admin.onrender.com \
+bun run --cwd=apps/storefront build:cf
+```
+Succeeded (`✓ built in 848ms`, 48 SSR modules, generated `.output/server/wrangler.json`, `.output/public`). Pre-deploy verification, via grep across the entire `.output/` build directory:
+- Production API URL (`rajadhaniyam-api-production`) **present** in the bundle (confirmed baked in).
+- Staging URL (`rajadhaniyam-api-staging`) — **not found**.
+- Render API URL (`rajadhaniyam-api.onrender.com`) — **not found**.
+- `rajadhaniyam.com` — **not found** anywhere in the build output.
+- Production admin URL (`rajadhaniyam-admin.onrender.com`) — **present**, correctly.
+- No secrets embedded — the only environment-derived values in the bundle are the two public, build-time `VITE_*` URLs, which are meant to be public (sent to every browser as the app's own API endpoint, same as staging).
+- Generated `.output/server/wrangler.json` inspected: `workers_dev: true`, no custom domain / route block present — confirmed `rajadhaniyam.in` is not attached.
+
+### D. Deploy
+
+```
+wrangler deploy --config .output/server/wrangler.json --name rajadhaniyam-storefront-production
+```
+Succeeded. **48 modules uploaded (1317.94 KiB), 43 static assets uploaded (12 already cached).**
+
+| Field | Value |
+|---|---|
+| Worker name | `rajadhaniyam-storefront-production` |
+| Worker URL | `https://rajadhaniyam-storefront-production.xyratekinnovation.workers.dev` |
+| Version ID | `d4e46780-c0e5-4517-9c9d-57b144085d4a` |
+| Custom domain attached | None — `workers_dev` URL only, as instructed |
+
+**Preview Worker confirmed untouched**: `wrangler deployments list --name rajadhaniyam-storefront-preview` shows its latest version is still `ffd2e4f5-d158-4a21-944c-5c91da8da5ba` (created `2026-09-17T08:11:36Z`, Phase 8) — no new deployment added by this phase. A direct check of `https://rajadhaniyam-storefront-preview.xyratekinnovation.workers.dev/` still returns 200.
+
+### E. Read-only smoke tests
+
+| Path | HTTP status |
+|---|---|
+| `/` | 200 |
+| `/shop` | 200 |
+| `/login` | 200 |
+| `/register` | 200 |
+| `/cart` | 200 |
+| `/checkout` | 200 |
+| `/account` | 200 |
+| `/orders` | 200 |
+
+All 8 pages render successfully. Further verification on the rendered HTML (not just status codes):
+- Homepage image URLs resolve to `https://rajadhaniyam.in/assets/...` — this can only happen if the SSR data came from **production** Cloud Run (its `STOREFRONT_URL` is `https://rajadhaniyam.in`; staging's is the Cloudflare preview URL, Render's is the Render storefront URL) — same proof technique used in Phase 8.
+- Admin link resolves to `https://rajadhaniyam-admin.onrender.com` — correct.
+- `/shop` page HTML contains real product data ("Kambu Broken").
+- A static asset (`/assets/styles-*.css`) loads with `200`, `~95KB` — confirms static asset serving works via the `ASSETS` binding.
+- No forms were submitted, no account created, no cart/order written, no checkout performed, no payment attempted — read-only throughout.
+
+### F. Production API connection verification (Cloud Run logs)
+
+Queried `rajadhaniyam-api-production`'s logs for the test window via the Cloud Logging REST API (`gcloud logging read` hit the same local Windows CLI quoting bug noted in Phase 14/15, worked around identically): **30 requests, all `status: 200`**, all against `https://rajadhaniyam-api-production-855749773400.asia-south1.run.app` — `/categories`, `/content/banners`, `/content/hero`, `/products`, `/products?bestseller=true`. All GET, no writes.
+
+**Confirmed NOT reaching staging or Render as a result of the production Worker**: a parallel check of `rajadhaniyam-api-staging`'s logs showed one incidental `GET /products?bestseller=true` at `15:23:28Z` from Cloudflare's own edge IP range — traced to this session's own earlier verification curl against the **preview** Worker's homepage (confirming it still works), which naturally triggers the preview Worker's normal calls to staging. Not related to the production Worker, not a leak — the production Worker's build output contains no staging or Render URL at all (per C), so it has no way to reach either.
+
+CORS: implicitly verified — every SSR page load succeeded with real data rendered, meaning the production Worker's server-side fetches to `rajadhaniyam-api-production` (same-origin from the server's perspective, not a browser CORS situation) worked cleanly; no CORS errors possible server-to-server. Client-side browser calls (if any occur post-hydration) weren't separately probed in this read-only pass, but the page loads and asset delivery confirm no blocking failures.
+
+### G. Rollback
+
+Not needed — build and deploy both succeeded on the first attempt, no errors at any step.
+
+### Confirmed
+
+- Production Worker uses **production** Cloud Run exclusively (proven via bundle inspection + log correlation).
+- Preview Worker (`rajadhaniyam-storefront-preview`) untouched — no new deployment, still serving.
+- **DNS/domain**: `rajadhaniyam.in` was **not** attached as a Cloudflare Custom Domain or route. No GoDaddy nameserver change. No Cloudflare DNS record created. `rajadhaniyam.com` was not referenced, inspected, or touched anywhere in this phase.
+- Render, Supabase, Razorpay, and production Cloud Run configuration are all unchanged.
+
+### Remaining blockers
+
+1. Production Razorpay webhook still misconfigured (unchanged, client's action).
+2. `SUPABASE_URL` still unset on staging (unchanged, out of scope).
+3. `rajadhaniyam.in` still has no DNS/Cloudflare zone — the production Worker exists but nothing points a real domain at it yet.
+4. No write-path (auth/cart/checkout/payment) testing has been performed against the production Worker — correctly deferred per this phase's read-only scope and the shared-database caution.
+5. Cloudflare Custom Domain attachment and GoDaddy nameserver change remain the next gated steps, not started.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
