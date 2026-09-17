@@ -377,6 +377,167 @@ Explicitly not done in this phase: no production Cloud Run service created, no D
 
 This section was committed and pushed to `migration/cloudflare-storefront` only, per standing instructions — not merged to `master`.
 
+## Phase 10: Production infrastructure preparation (2026-09-17)
+
+Inspection + planning only — nothing in this phase was deployed, changed, or created. Razorpay TEST payment testing remains deferred to final QA, per instructions.
+
+### A. Current production architecture (confirmed)
+
+```
+??? domain (see B) ──X── (not currently pointed at this project at all)
+
+Render:
+  Storefront (Docker)  https://rajadhaniyam-storefront.onrender.com
+  Admin (static)        https://rajadhaniyam-admin.onrender.com
+  API (Docker)          https://rajadhaniyam-api.onrender.com  ──► Supabase Postgres/Storage
+                                                                ──► Razorpay (LIVE, per render.yaml `sync:false` secrets — not inspected, no values touched)
+```
+
+### B. Production domain / DNS findings — ⚠️ requires client clarification
+
+The codebase itself is inconsistent about which domain is the real one:
+- `docs/DEPLOYMENT.md` and `docs/DEVELOPMENT_ROADMAP.md` both refer to `rajadhaniyam.com` as the eventual custom domain.
+- The storefront's own footer and contact page (`apps/storefront/src/components/site/Footer.tsx`, `apps/storefront/src/routes/contact.tsx`) show the contact email as `care@rajadhaniyam.in`.
+
+Read-only public DNS/HTTP lookups (no modification, standard public queries) were run against both to determine ground truth:
+
+| Domain | DNS | Finding |
+|---|---|---|
+| `rajadhaniyam.com` | Resolves — `A` → `76.223.105.230`, `13.248.243.5` | **Currently serving a live, different website** — HTTP response headers identify it as a **GoDaddy Website Builder** site (`Content-Security-Policy: ... godaddy.com`, `img1.wsimg.com` asset CDN, `X-SiteId: ap-south-1`). This is not Render, not parked, not blank — it's an existing live site. |
+| `rajadhaniyam.com` nameservers | `ns65.domaincontrol.com`, `ns66.domaincontrol.com` | GoDaddy DNS (not Cloudflare) |
+| `rajadhaniyam.com` MX | `smtp.secureserver.net` (pri 0), `mailstore1.secureserver.net` (pri 10) | **Live GoDaddy-hosted email** on this domain |
+| `rajadhaniyam.com` TXT | `v=spf1 include:spf.em.secureserver.net ?all` | SPF record tied to that GoDaddy email — **must not be touched** without a full replacement SPF record, or outbound mail from this domain will start failing |
+| `rajadhaniyam.in` | `NXDOMAIN` (does not resolve at all) | Either not registered, or registered with no DNS configured |
+
+**This needs your confirmation before any further DNS planning**: is `rajadhaniyam.com` the intended production domain (meaning the current GoDaddy site would need to be replaced/redirected as part of go-live, and its existing email must be preserved), is `rajadhaniyam.in` the intended domain (meaning it needs to be registered/configured from scratch), or is a different domain entirely planned? I have not guessed — this is reported as "not determined" until you confirm.
+
+Other findings:
+3. **Frontend hosting**: Render, Docker (`rajadhaniyam-storefront.onrender.com`) — no domain currently points here.
+4. **Production API URL**: `https://rajadhaniyam-api.onrender.com`.
+9. **Current Render services**: `rajadhaniyam-api`, `rajadhaniyam-storefront` (both `plan: free`, Docker), `rajadhaniyam-admin` (static). All three defined in `render.yaml`.
+10-11. **API config / CORS**: `STOREFRONT_URL` + `ADMIN_URL` + `EXTRA_CORS_ORIGINS` (currently temporarily includes the Cloudflare preview origin — see the note in `render.yaml`, flagged for removal after this migration).
+12. **Storefront config**: `VITE_API_BASE_URL=https://rajadhaniyam-api.onrender.com`, `VITE_ADMIN_URL=https://rajadhaniyam-admin.onrender.com` (build-time only).
+13-14. **Razorpay production config**: `docs/DEPLOYMENT.md` documents the intended webhook URL as `https://rajadhaniyam-api.onrender.com/payments/webhook` — **whether this webhook is actually registered on Razorpay's side cannot be determined from the repository**; that's dashboard-side state only visible with Razorpay Dashboard access.
+15. **Supabase project**: production `render.yaml` secrets (`DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`) are separate `sync:false` entries from the staging ones used in Cloud Run — **whether they point at the same Supabase project as staging is not determined from the repo alone** (values were never inspected, by design); this should be confirmed before cutover to avoid staging/production data crossing.
+16. **Production env var names**: `NODE_ENV`, `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `SESSION_SECRET`, `STOREFRONT_URL`, `ADMIN_URL`, `EXTRA_CORS_ORIGINS`, `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET`, `PAYMENT_WEBHOOK_SECRET` (per `render.yaml`).
+
+### C. Production Cloud Run design (proposed, not deployed)
+
+Reusing the staging configuration as a starting point, since staging has run cleanly with it (zero errors across the full Phase 8 test session, one warm instance, no cold starts, no memory-pressure signals in logs):
+
+| Setting | Staging (proven) | Production (proposed) |
+|---|---|---|
+| Service name | `rajadhaniyam-api-staging` | `rajadhaniyam-api-production` (separate service, never reuse staging) |
+| Region | `asia-south1` | `asia-south1` |
+| CPU | 1 vCPU | 1 vCPU (unchanged) |
+| Memory | 512Mi | 512Mi initially (raise only if real traffic shows pressure) |
+| Min instances | 1 | 1 (avoids cold starts, same rationale as staging) |
+| Max instances | 3 | 3 initially — revisit once real order volume is known |
+| Concurrency | 80 (default) | 80 (default) |
+| CPU allocation | request-based | request-based |
+| Image | shared Artifact Registry repo `rajadhaniyam-api` | same repo, but production should deploy a specific reviewed/tagged digest, not "whatever staging last built" |
+
+No deployment performed. Detailed CPU/memory time-series still hasn't been pulled from Cloud Monitoring (same gap noted in Phase 8F) — worth doing once there's real traffic to size against, not blocking for initial launch.
+
+### D. Production secrets plan (not created)
+
+Current staging secrets are plain-named (`DATABASE_URL`, `PAYMENT_PROVIDER_KEY`, etc.) with no environment prefix — they're scoped only by which Cloud Run service references them. To avoid any risk of a production service accidentally reading a staging secret (or vice versa), production secrets should be **entirely separate Secret Manager entries**, not new versions of the existing ones:
+
+| Category | Staging secret (existing) | Production secret (proposed name) |
+|---|---|---|
+| DB connection | `DATABASE_URL` | `DATABASE_URL_PRODUCTION` |
+| Supabase service key | `SUPABASE_SERVICE_ROLE_KEY` | `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION` |
+| Auth | `JWT_SECRET` | `JWT_SECRET_PRODUCTION` |
+| Session | `SESSION_SECRET` | `SESSION_SECRET_PRODUCTION` |
+| Razorpay key | `PAYMENT_PROVIDER_KEY` | `PAYMENT_PROVIDER_KEY_PRODUCTION` |
+| Razorpay secret | `PAYMENT_PROVIDER_SECRET` | `PAYMENT_PROVIDER_SECRET_PRODUCTION` |
+| Razorpay webhook | *(not created for staging)* | `PAYMENT_WEBHOOK_SECRET_PRODUCTION` |
+
+Rationale for a `_PRODUCTION` suffix over a path-style prefix (`rajadhaniyam/production/...`): Secret Manager secret IDs are flat (no real path hierarchy in the free-tier API surface used here), and a suffix keeps the existing staging secret names/IAM bindings completely untouched — zero risk to the working staging setup. **Not created yet** — this is a naming plan only, and production secret values must be entered directly by the client/owner (LIVE Razorpay keys, production DB credentials), never by the assistant.
+
+### E. Production Cloudflare Worker design (proposed, not deployed)
+
+Inspected the existing preview Worker config (`apps/storefront/wrangler.json`, `apps/storefront/package.json`):
+1. **Worker name**: proposed `rajadhaniyam-storefront-production` (the existing `wrangler.json`'s `name` field is hardcoded to `rajadhaniyam-storefront-preview` — production needs its **own** `wrangler.json` or a `--name` override at deploy time, not a shared config).
+2. **Build command**: same as preview — `bun run --cwd=apps/storefront build:cf` (`vite build`, no code change needed).
+3. **Deploy command**: `wrangler deploy --name rajadhaniyam-storefront-production --config <production-wrangler-config>` (or a second config file, e.g. `wrangler.production.json`).
+4. **`VITE_API_BASE_URL` handling**: unchanged mechanism (pure Vite build-time var) — set to the future `rajadhaniyam-api-production` Cloud Run URL at build time.
+5. **Production env vars**: same shape as preview (`VITE_API_BASE_URL`, `VITE_ADMIN_URL`) — values differ (point at production API/admin instead of staging).
+6. **Custom domain/route**: once DNS is confirmed (see B), Cloudflare "Custom Domains" (or a Worker Route) attaches the Worker to the real domain — not needed until DNS design is finalized.
+7. **Reuse**: yes — the storefront's Cloudflare build output (`cloudflare-module` Vite preset) is environment-agnostic; only the Worker name, config file, and build-time env vars need to differ.
+8. **Must remain different between preview and production**: Worker name, `wrangler.json`/config file, `VITE_API_BASE_URL`/`VITE_ADMIN_URL` values, and (once attached) the custom domain route. The `workers_dev: true` preview subdomain should likely stay off (or be a separate concern) for the production Worker once a real domain is attached.
+
+### F. DNS cutover plan (design only — nothing changed)
+
+Current (confirmed, see B): `rajadhaniyam.com` → GoDaddy nameservers → GoDaddy Website Builder (unrelated live site) + GoDaddy email (MX/SPF).
+
+Target, once the domain question in B is resolved:
+```
+Client domain ──► Cloudflare (nameservers changed at registrar, or DNS-only mode)
+                     └──► CNAME/route ──► Production Worker
+                     └──► (optional) api.<domain> ──► Cloud Run production custom domain mapping
+```
+- **A/CNAME records**: root domain → Cloudflare (via Cloudflare's own onboarding, either full nameserver delegation or CNAME setup depending on plan); `www` → same Worker (redirect or serve directly, decide one canonical host and 301 the other).
+- **SSL/TLS**: automatic via Cloudflare once proxied — no manual certificate work needed.
+- **API hostname**: optional; the storefront can call Cloud Run's own `*.run.app` URL directly (as staging does), or a custom `api.<domain>` can be mapped to Cloud Run for a cleaner CORS/branding story — not required for functionality.
+- **Records that must NOT be touched**: the MX records (`smtp.secureserver.net`, `mailstore1.secureserver.net`) and the SPF TXT record found in B, **if** `rajadhaniyam.com` is confirmed as the domain and its GoDaddy email is still in active use — any DNS/nameserver migration must explicitly re-create these records at the new provider (Cloudflare) rather than drop them. Full enumeration of all existing records (including any DKIM/DMARC TXT entries not checked here) should be done via the GoDaddy DNS dashboard directly before any nameserver change, since only MX/SPF/NS were queried in this inspection.
+
+### G. Rollback plan
+
+- **Storefront/Worker-level rollback** (same proven pattern as Phase 8's rollback): rebuild the production Worker with `VITE_API_BASE_URL` pointed back at `https://rajadhaniyam-api.onrender.com` and redeploy to the same Worker name — one command, no DNS change needed if DNS already points at Cloudflare→Worker (Cloudflare stays the front door; only the Worker's backend target changes).
+- **DNS-level rollback** (only if nameservers were already moved to Cloudflare before a problem is found): point the Cloudflare route back at Render's origin instead of the Worker, or revert nameservers at the registrar — slower, so the Worker-level rollback above should be tried first for any application-level issue.
+- **Render must stay running and untouched** throughout stabilization — this is already true today (nothing in this migration has stopped or modified it).
+- Rollback does **not** mean reverting to the pre-existing GoDaddy site found in B — that's a separate decision for the client, outside this migration's scope.
+
+### H. Cutover sequence (documented, not executed)
+
+1. Resolve the domain question in B with the client.
+2. Deploy `rajadhaniyam-api-production` Cloud Run service (per C) from a specific reviewed image digest.
+3. Create production secrets (per D), populated directly by the client/owner.
+4. Verify production Cloud Run in isolation (`/health`, `/products`, logs) using its own `*.run.app` URL — before any DNS/domain involvement.
+5. Build and deploy the production Cloudflare Worker (per E), initially reachable only via its own `*.workers.dev` URL, same as the preview pattern — verify end-to-end against production Cloud Run.
+6. Re-run the full manual test matrix (Phase 8's 13 scenarios + Phase 10H's expanded checklist) against production Worker → production Cloud Run.
+7. Register the Razorpay production webhook against the production Cloud Run URL — only after step 6 passes, and only with the client's own LIVE credentials already in place server-side.
+8. DNS cutover (per F) — last step, only after 2-7 are all verified green.
+9. Immediate post-cutover smoke test on the live domain (homepage, login, cart, checkout, one COD order, one small real Razorpay payment under the client's control).
+10. Rollback window: keep Render fully running and the pre-cutover DNS state documented for a defined stabilization period (e.g. 1-2 weeks) before considering decommissioning anything.
+11. Only after stabilization: decommission Render services and any now-unused resources.
+
+### I. Final QA checklist
+
+**Customer**: homepage, navigation, category/shop listing, product details, search, register, login, cart, address, checkout, COD order, Razorpay TEST payment, Razorpay TEST payment failure, Razorpay TEST payment cancellation, order confirmation, order history, mobile viewport, desktop viewport.
+
+**Admin**: login, dashboard, product management, order management, customer data view, order status transitions.
+
+**Infrastructure**: Cloud Run (health, logs, scaling), Cloudflare (Worker deploy, routing), Supabase (DB + Storage connectivity), DNS resolution, SSL/TLS validity, CORS (preflight + real requests cross-origin), log visibility, baseline performance/cold-start behavior, rollback drill (actually exercised once, not just documented).
+
+**Payment**: Razorpay TEST payment success, signature verification, webhook behavior (if configured), payment failure handling, payment cancellation handling, payment/order status consistency after each of the above.
+
+### J. Client handover preparation
+
+Documentation to prepare (no credentials inside any of it):
+- Live website URL and admin URL
+- Admin usage guide (day-to-day: products, orders, customers)
+- Infrastructure overview (this document, simplified to a client-facing summary)
+- Deployment/runbook (how to redeploy each piece, who has access)
+- Backup/rollback procedure
+- Support process (who to contact for infra vs. application issues)
+- Domain ownership confirmation (registrar account access, per the open question in B)
+- Third-party services list (Supabase, Razorpay, Cloudflare, Google Cloud, Render-during-stabilization) with account-ownership noted for each
+- Credential transfer procedure (client enters/rotates their own secrets directly; the assistant never holds or transmits them)
+
+### K. Remaining blockers
+
+1. **Domain identity unresolved** (`rajadhaniyam.com` vs `rajadhaniyam.in` vs other) — blocks all DNS/Cloudflare production planning beyond what's documented here.
+2. **`rajadhaniyam.com` currently serves a live, unrelated GoDaddy site with active email** — if this is the intended domain, the client needs to decide how the existing site/email is handled during cutover.
+3. **Razorpay staging credentials are still LIVE, not TEST** (Phase 9B, unresolved) — blocks Phase 9D/9E test-payment verification, intentionally deferred to final QA per this phase's instructions, but still open.
+4. Whether production Supabase is the same project as staging is not confirmed (values not inspected).
+5. Whether a Razorpay production webhook is actually registered today is not confirmed (dashboard-only visibility).
+
+### L. Documentation
+
+This section committed and pushed to `migration/cloudflare-storefront` only — not merged to `master`.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
