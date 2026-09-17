@@ -538,11 +538,128 @@ Documentation to prepare (no credentials inside any of it):
 
 This section committed and pushed to `migration/cloudflare-storefront` only — not merged to `master`.
 
+## Phase 11: Domain confirmed (rajadhaniyam.in) — production preparation (2026-09-17)
+
+**Confirmed by the client**: the production domain for this project is **`rajadhaniyam.in`**, purchased specifically for Rajadhaniyam. `rajadhaniyam.com` is explicitly a **different, unrelated site and must never be touched** — no DNS, hosting, email, or any other change to it, ever, as part of this project.
+
+### A. `rajadhaniyam.in` registration/DNS findings
+
+Checked via public RDAP (the standard successor to WHOIS, an authenticated registry lookup — read-only, no changes) and public DNS:
+
+1. **Registered?** Yes.
+2. **Registrar**: GoDaddy (IANA registrar ID 146).
+3. **Registrant**: "Xyratek innovation private limited", Tamil Nadu, IN — matches the client's own company, confirming this is genuinely the client's domain.
+4. **Registered on**: 2026-09-15 (2 days before this check), expires 2027-09-15.
+5. **Current nameservers**: `ns41.domaincontrol.com`, `ns42.domaincontrol.com` — **GoDaddy's own DNS**, not yet Cloudflare.
+6. **DNS records**: none observed yet — a direct `nslookup`/public-DNS-over-HTTPS query for A/NS/MX/TXT/SOA all returned NXDOMAIN at the authoritative `.in` registry level, even though RDAP confirms nameservers are associated. This is consistent with a **very recently registered domain (2 days old) where propagation to the live DNS resolution path hasn't fully completed yet** — not an error, just early registration state. Confirm current status directly in the GoDaddy DNS dashboard before relying on this.
+7. **MX/email records**: none found (consistent with #6 — nothing has propagated/been configured yet).
+8. **Cloudflare already configured?** No — nameservers are still GoDaddy's default ones; Cloudflare has not been added to this domain yet.
+9. **Domain status codes** (from RDAP): `client delete/renew/transfer/update prohibited`, `add period` — all standard GoDaddy defaults for a brand-new registration, not a red flag.
+
+No changes were made to this domain or its DNS during this check — only public, read-only lookups.
+
+### B. Supabase staging/production relationship
+
+- **Staging's Supabase project**: Cloud Run staging's `DATABASE_URL` secret was checked the same careful way as the Razorpay Key ID in Phase 9 — only the **non-secret project reference** was extracted (the identifier segment of the pooled-connection username, e.g. the `<ref>` in `postgres.<ref>@...`), the password/host were never printed or logged. Staging's project ref: **`okoalheebdrszwkiombn`**. This alone is not sensitive (it's the same identifier visible in the Supabase dashboard URL) and lets you visually compare it against Render's production `DATABASE_URL` yourself.
+- **Render production's Supabase project**: **not determined** — this session has no access to Render's dashboard or environment variables (no Render API/CLI credentials configured here), so production's project ref cannot be checked or compared from this side.
+- **Are staging and production on the same database?** Not determined from this session for the reason above. **Please compare `okoalheebdrszwkiombn` against the project ref visible in Render's `DATABASE_URL` yourself** — if they match, staging has been reading/writing the production database this entire time (worth knowing given the test order created and cleaned up in Phase 8).
+- **Are separate projects practical?** Yes — Supabase's free/low tiers support multiple projects; a dedicated staging project would fully eliminate any risk of staging tests touching production data, at the cost of needing to seed/maintain separate schema+data in a second project.
+- **Consequences of sharing the production DB for staging**: any staging test (including future Razorpay TEST payments once unblocked) would create real rows in the production database — stock decrements, orders, customer records — requiring careful manual cleanup every time, exactly as was done in Phase 8. Not currently a correctness bug, but an ongoing operational risk as long as it continues.
+- Per instructions, **no Supabase configuration was changed** — this is a finding only.
+
+### C. Production Cloud Run design (finalized proposal, not deployed)
+
+- **Service name**: `rajadhaniyam-api-production`
+- **Project**: `xyratek-websites`, region `asia-south1`
+- **Image**: reuse the already-verified staging image — `asia-south1-docker.pkg.dev/xyratek-websites/rajadhaniyam-api/rajadhaniyam-api@sha256:2d2861c7f81b52cdbfa306004bfd286404f2e69f0726d5d550793905647c2568` (same digest documented in the Artifact Registry section above). **No rebuild** — this exact image already ran cleanly through the full Phase 8 test matrix.
+- **CPU**: 1 vCPU · **Memory**: 512Mi · **Min instances**: 1 · **Max instances**: 3 · **Concurrency**: 80 (default) · **CPU allocation**: request-based — identical to staging's proven config (see Phase 10C rationale).
+- **Runtime service account**: proposal — use the same project default (`855749773400-compute@developer.gserviceaccount.com`) unless the client wants a dedicated least-privilege service account for production (cleaner separation, optional hardening, not required to function).
+- **Required Secret Manager secrets**: `DATABASE_URL_PRODUCTION`, `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION`, `JWT_SECRET_PRODUCTION`, `SESSION_SECRET_PRODUCTION`, `PAYMENT_PROVIDER_KEY_PRODUCTION`, `PAYMENT_PROVIDER_SECRET_PRODUCTION`, `PAYMENT_WEBHOOK_SECRET_PRODUCTION` (naming plan from Phase 10D) — **none created yet**.
+- **Required non-secret env vars**: `NODE_ENV=production`, `STOREFRONT_URL=https://rajadhaniyam.in` (once live), `ADMIN_URL` (TBD — keep on Render or migrate separately, client's call), `SUPABASE_URL` (currently **not set at all on staging** — see note below, needs deciding for production).
+- **Note**: staging's own Cloud Run config does not currently set `SUPABASE_URL` (confirmed via `gcloud run services describe` — it's absent from both secrets and non-secret env vars). Since `SUPABASE_URL` is `optional()` in `apps/api/src/config/env.ts`, the app starts fine without it, but this should be double-checked against what actually needs it (Storage operations) before assuming production can skip it too.
+
+### D. Production secret plan
+
+Unchanged from the Phase 10D naming plan (`_PRODUCTION` suffix on each existing secret name, entirely separate Secret Manager entries from staging's) — reconfirmed here, still **not created**. Values (DB credentials, Supabase service key, Razorpay LIVE keys) must be entered directly by the client, never requested by or shown to the assistant.
+
+### E. Production Cloudflare Worker design (finalized proposal, not deployed)
+
+1. **Reuse from preview**: the build pipeline (`bun run --cwd=apps/storefront build:cf`, the `cloudflare-module` Vite preset) is environment-agnostic and fully reusable as-is.
+2. **Must be production-specific**: Worker name, its own `wrangler.json`/config file (the existing one is hardcoded to `rajadhaniyam-storefront-preview`), and all build-time env var values.
+3. **`VITE_API_BASE_URL`**: `https://rajadhaniyam-api-production-<hash>.asia-south1.run.app` (exact hostname known only after the production Cloud Run service is actually created — Cloud Run assigns it).
+4. **`STOREFRONT_URL`** (set on the API side, not the Worker): `https://rajadhaniyam.in`.
+5. **Production API URL**: the production Cloud Run service's own URL (see #3) unless/until a custom `api.rajadhaniyam.in` mapping is added.
+6. **Custom domain for `rajadhaniyam.in`**: attached via Cloudflare "Custom Domains" once the domain's nameservers point at Cloudflare (see F) — not possible until then.
+7. **Build/deploy commands**: `VITE_API_BASE_URL=<prod-cloud-run-url> VITE_ADMIN_URL=<prod-admin-url> bun run --cwd=apps/storefront build:cf` then `wrangler deploy --name rajadhaniyam-storefront-production --config wrangler.production.json` (new config file, not yet created).
+8. **Cloudflare env vars/secrets**: none required beyond the build-time Vite vars above — no Wrangler `vars`/`secrets` block exists today and none are needed for this app's current design.
+
+Not deployed. `rajadhaniyam.in` not attached to anything yet.
+
+### F. Production DNS plan for `rajadhaniyam.in`
+
+Current (per A): GoDaddy nameservers, no records configured yet, nothing live.
+
+Target:
+```
+rajadhaniyam.in ──► Cloudflare nameservers (registrar-level NS change at GoDaddy)
+                       └──► root domain ──► Production Worker (via Cloudflare Custom Domain)
+                       └──► www.rajadhaniyam.in ──► redirect to root (or same Worker, one canonical host)
+```
+- **A/CNAME**: once nameservers point at Cloudflare, the root domain attaches to the Worker via Cloudflare's own "Custom Domains" feature (Cloudflare manages the proxied record automatically) — no manual A/CNAME record needed for the Worker itself.
+- **`www.rajadhaniyam.in`**: recommend a single canonical host (root, no `www`, matching the pattern already used for the `.com` reference in the docs) with a redirect rule for `www` → root, set up in Cloudflare once the zone exists.
+- **SSL/TLS**: automatic via Cloudflare once the zone is active — no manual certificate work.
+- **API hostname**: optional `api.rajadhaniyam.in` → Cloud Run production custom domain mapping; not required, the storefront can call the `*.run.app` URL directly as staging already does.
+- **Records that must not be touched**: **none currently exist on `rajadhaniyam.in`** (per A) — unlike `.com`, there is no existing email or third-party service on this domain to preserve, which makes this a clean first-time setup. (`rajadhaniyam.com`'s MX/SPF records remain completely out of scope for this project, as instructed.)
+
+Nothing changed. This is a plan only.
+
+### G. Razorpay production plan
+
+- Staging remains on the credentials found in Phase 9B (currently LIVE, flagged, unresolved) — **not touched in this phase**, and Razorpay TEST verification stays deferred to final QA per this phase's instructions.
+- **Production webhook URL, once the production Cloud Run service exists**: `https://<rajadhaniyam-api-production-service-url>/payments/webhook` (exact hostname known only after deployment), or `https://api.rajadhaniyam.in/payments/webhook` if the optional custom API hostname from F is set up.
+- **Not created, not changed.** No LIVE credentials requested or used.
+
+### H. Complete production cutover sequence
+
+| # | Step | Reversible? |
+|---|---|---|
+| 1 | Deploy `rajadhaniyam-api-production` Cloud Run service (reusing the verified image digest) | Yes — delete the service, zero impact elsewhere |
+| 2 | Create `_PRODUCTION`-suffixed secrets, populated by the client directly | Yes — delete the secrets |
+| 3 | Verify production Cloud Run in isolation via its own `*.run.app` URL (`/health`, `/products`, logs) | N/A (read-only verification) |
+| 4 | Build & deploy `rajadhaniyam-storefront-production` Worker, reachable only via its own `*.workers.dev` URL first | Yes — delete/redeploy the Worker |
+| 5 | Attach `rajadhaniyam.in` to Cloudflare (registrar nameserver change at GoDaddy) | **Harder to reverse quickly** — NS changes can take time to propagate back; this is the first meaningfully "sticky" step |
+| 6 | Attach the domain to the production Worker via Cloudflare Custom Domains | Yes, while nameservers already point at Cloudflare |
+| 7 | Re-run the full test matrix (Phase 8's 13 scenarios + Phase 10H's expanded checklist) against the live domain | N/A (verification) |
+| 8 | Register the Razorpay production webhook against the production API URL | Yes — remove/repoint the webhook in Razorpay Dashboard |
+| 9 | Production smoke test on the live domain, including one real small Razorpay payment **under the client's own control** | N/A — a real transaction, not reversible in the payment-ledger sense, but standard practice |
+| 10 | Rollback window — Render kept fully running, pre-cutover DNS state documented, for an agreed stabilization period | N/A (observation period) |
+| 11 | Client handover (Phase 10J documentation, credential transfer, admin training) | N/A |
+| 12 | Only after stabilization: decommission Render and any now-unused resources | **Not reversible** — the actual point of no return for this whole migration |
+
+**Step 5 (DNS/nameserver change) is the true go/no-go point** — everything before it is fully reversible with zero customer-facing impact (nothing customer-facing is attached to `rajadhaniyam.in` yet, so steps 1-4 can be built and tested without any risk to a live audience). Steps 6-9 remain easily reversible (point the Cloudflare route/Worker var back, or revert nameservers). Step 12 is the only genuinely irreversible action, and it's intentionally last, after a full stabilization period.
+
+### I. Rollback plan
+
+Same as Phase 10G, reconfirmed: Worker-level rollback (repoint `VITE_API_BASE_URL` back to Render, redeploy same Worker) is the fast path for any application-level issue once Cloudflare is already the front door; DNS/nameserver rollback (point back at GoDaddy or repoint the Cloudflare route at Render's origin) is the slower path, needed only if Cloudflare itself is the problem. Render stays untouched and running throughout.
+
+### J. Remaining blockers
+
+1. **DNS not yet propagated/configured for `rajadhaniyam.in`** — expected for a 2-day-old domain; needs to be actively configured (nameservers → Cloudflare) as part of Phase 11E/F's plan before any of it can execute — not something to wait out passively.
+2. **Staging vs. production Supabase relationship unconfirmed** — client needs to compare project ref `okoalheebdrszwkiombn` (staging) against their Render production `DATABASE_URL` to know whether staging tests have been touching production data.
+3. **Razorpay staging credentials still LIVE, not TEST** (Phase 9B) — unresolved, deferred to final QA per this phase's explicit instruction, not a blocker for the rest of Phase 11's planning.
+4. `SUPABASE_URL` is unset on Cloud Run staging entirely — worth deciding whether production needs it before finalizing C's env var list.
+5. No production secrets, Cloud Run service, or Cloudflare Worker exist yet — Phase 11 is planning only, per instructions.
+
+### K. Documentation
+
+This section committed and pushed to `migration/cloudflare-storefront` only — not merged to `master`.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
 - Do not modify or delete the existing Cloudflare preview deployment.
-- Do not modify production DNS.
+- Do not modify production DNS (this covers `rajadhaniyam.in`, the confirmed project domain, once it's live).
+- **`rajadhaniyam.com` is NOT this project's domain — it belongs to a separate, unrelated site with active GoDaddy email (MX/SPF). Never modify its DNS, hosting, or email under any circumstance, even by analogy/pattern-matching from `rajadhaniyam.in` work.**
 - Do not modify the production Cloudflare deployment.
 - Do not change the production Razorpay webhook, or create any webhook against the Cloud Run staging service.
 - Do not use production Razorpay credentials in Cloud Run staging — test-mode keys only.
