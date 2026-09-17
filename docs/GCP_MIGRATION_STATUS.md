@@ -874,6 +874,39 @@ Steps that will eventually be executed (documented only):
 
 This section committed and pushed to `migration/cloudflare-storefront` only — not merged to `master`. No production deployment, DNS, Supabase, Render, or Razorpay change made in this phase.
 
+## Phase 14: Production Cloud Run deployment — STOPPED, missing secrets (2026-09-17)
+
+**Deployment did not proceed.** Per this phase's own instruction ("If the production secret objects do not yet exist, STOP before deployment and report exactly which secret objects are missing"), `gcloud secrets list --project=xyratek-websites` was checked before any deploy attempt:
+
+```
+Existing secrets: DATABASE_URL, JWT_SECRET, PAYMENT_PROVIDER_KEY, PAYMENT_PROVIDER_SECRET, SESSION_SECRET, SUPABASE_SERVICE_ROLE_KEY
+```
+
+All 6 are staging's existing secrets (unchanged, per Phase 7). **None of the 7 expected `_PRODUCTION` secret objects exist**:
+
+| Missing secret | Status |
+|---|---|
+| `DATABASE_URL_PRODUCTION` | Does not exist |
+| `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION` | Does not exist |
+| `JWT_SECRET_PRODUCTION` | Does not exist |
+| `SESSION_SECRET_PRODUCTION` | Does not exist |
+| `PAYMENT_PROVIDER_KEY_PRODUCTION` | Does not exist |
+| `PAYMENT_PROVIDER_SECRET_PRODUCTION` | Does not exist |
+| `PAYMENT_WEBHOOK_SECRET_PRODUCTION` | Does not exist |
+
+Per instructions, **secrets were not created or populated without explicit approval** — not even as empty containers, since this phase's instructions were to stop and report, not to create.
+
+**Nothing else in Phase 14 was executed as a result**: no Cloud Run service was deployed, so 14A (deployment verification), 14B (smoke tests), 14C (log verification), and 14D (storage check) are all **N/A — no production service exists to test.** 14E (rollback) is N/A — there is nothing to roll back; Render and staging remain completely untouched, exactly as before this phase started.
+
+**To unblock**: the 7 production secrets need to be created (empty containers) and populated with production values before deployment can proceed:
+- `DATABASE_URL_PRODUCTION` / `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION` — per Phase 13C, may intentionally hold the same underlying values as staging's `DATABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` (confirmed shared Supabase project), just as separate secret objects.
+- `JWT_SECRET_PRODUCTION` / `SESSION_SECRET_PRODUCTION` — must be freshly generated, never copied from staging.
+- `PAYMENT_PROVIDER_KEY_PRODUCTION` / `PAYMENT_PROVIDER_SECRET_PRODUCTION` — Razorpay LIVE credentials, entered directly by the client only when cutover is actually imminent.
+- `PAYMENT_WEBHOOK_SECRET_PRODUCTION` — not needed until the production webhook is registered (later in the cutover sequence), but the secret object itself can be created empty now if desired.
+- `SUPABASE_URL` (non-secret, per Phase 13E — required for admin image uploads): the correct value is the project URL for `okoalheebdrszwkiombn` (`https://okoalheebdrszwkiombn.supabase.co`, Supabase's standard URL pattern for a project ref) — **not independently confirmed against a live value in this phase** (no reachability test performed, to avoid any unnecessary network call against production Supabase infrastructure outside the scope of this stop-and-report phase); worth a quick visual confirmation in the Supabase dashboard before use.
+
+Waiting for explicit approval before creating any of these secret objects.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
