@@ -953,6 +953,77 @@ That's the **storefront** service (the SSR frontend, `rajadhaniyam-storefront` o
 
 **All 7 production secrets are now populated.** The Phase 13A production Cloud Run deploy command is technically unblocked on the secrets front — deployment itself still requires explicit client approval before executing, per standing process. The webhook misconfiguration above is independent of the Cloud Run deployment and does not block it.
 
+## Phase 14A/B/C: Production Cloud Run DEPLOYED (2026-09-17)
+
+**Client explicitly asked the assistant to fix the webhook URL and deploy.** The webhook fix was declined by the assistant — this session has no Razorpay dashboard/API access at all (no credentials, no session, nothing configured in this environment), so it technically cannot make that change, independent of the standing restriction. That remains the client's own action (see above). The Cloud Run deployment proceeded, since it was both previously fully specified/reviewed (Phase 13A) and explicitly approved in this message.
+
+### Deployment
+
+Executed the exact two-step command documented in Phase 13A, unmodified:
+```
+gcloud run deploy rajadhaniyam-api-production --image=...@sha256:2d2861c7f81b52cdbfa306004bfd286404f2e69f0726d5d550793905647c2568 \
+  --region=asia-south1 --project=xyratek-websites --cpu=1 --memory=512Mi \
+  --min-instances=1 --max-instances=3 --concurrency=80 \
+  --set-env-vars=NODE_ENV=production,STOREFRONT_URL=https://rajadhaniyam.in,ADMIN_URL=https://rajadhaniyam-admin.onrender.com \
+  --set-secrets=DATABASE_URL=DATABASE_URL_PRODUCTION:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY_PRODUCTION:latest,JWT_SECRET=JWT_SECRET_PRODUCTION:latest,SESSION_SECRET=SESSION_SECRET_PRODUCTION:latest,PAYMENT_PROVIDER_KEY=PAYMENT_PROVIDER_KEY_PRODUCTION:latest,PAYMENT_PROVIDER_SECRET=PAYMENT_PROVIDER_SECRET_PRODUCTION:latest
+
+gcloud run services update rajadhaniyam-api-production --region=asia-south1 --project=xyratek-websites --no-invoker-iam-check
+```
+Succeeded on first attempt (100% traffic routed immediately, no rollout issues).
+
+### A. Deployment verification
+
+| Field | Value |
+|---|---|
+| Service | `rajadhaniyam-api-production` |
+| Region | `asia-south1` |
+| Revision | `rajadhaniyam-api-production-00001-wkk` |
+| Image tag | `rajadhaniyam-api:f2196591fa87` |
+| Actual digest | `sha256:2d2861c7f81b52cdbfa306004bfd286404f2e69f0726d5d550793905647c2568` — matches the pre-verified image exactly, no rebuild |
+| CPU | 1 vCPU |
+| Memory | 512Mi |
+| Min instances | 1 (`autoscaling.knative.dev/minScale: '1'`) |
+| Max instances | 3 (`autoscaling.knative.dev/maxScale: '3'`) |
+| Concurrency | 80 |
+| CPU allocation | request-based (no always-allocated annotation) |
+| Public access | `run.googleapis.com/invoker-iam-disabled: 'true'` — same mechanism as staging, **no `allUsers` IAM binding**, no org policy touched |
+| Env var names | `NODE_ENV`, `STOREFRONT_URL`, `ADMIN_URL`, `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `SESSION_SECRET`, `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET` |
+| Secret refs | `DATABASE_URL_PRODUCTION:latest`, `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION:latest`, `JWT_SECRET_PRODUCTION:latest`, `SESSION_SECRET_PRODUCTION:latest`, `PAYMENT_PROVIDER_KEY_PRODUCTION:latest`, `PAYMENT_PROVIDER_SECRET_PRODUCTION:latest` |
+| Service URLs | `https://rajadhaniyam-api-production-855749773400.asia-south1.run.app`, `https://rajadhaniyam-api-production-656vlc3k6a-el.a.run.app` |
+
+No values printed at any point.
+
+### B. Read-only smoke tests
+
+| Endpoint | HTTP status | Result | DB access |
+|---|---|---|---|
+| `GET /health` | 200 | `{"success":true,"data":{"status":"ok"}}` | N/A |
+| `GET /products` | 200 | Real product data returned (e.g. "Kambu Broken", ₹95) | Yes — confirms `DATABASE_URL_PRODUCTION` connects correctly |
+| `GET /categories` | 200 | Real category data returned | Yes |
+
+Zero errors across all three. Notably, product/category image URLs already resolve to `https://rajadhaniyam.in/assets/...` — direct confirmation that `STOREFRONT_URL=https://rajadhaniyam.in` is wired correctly into image URL generation, even though the domain isn't live yet. No write endpoints were touched, per instructions.
+
+### C. Log verification
+
+`gcloud logging read` failed in this environment with a Windows path-quoting error unrelated to the deployment itself (a local CLI/shell issue, not a Cloud Run problem) — worked around by querying the Cloud Logging REST API directly with an access token. 12 log entries in the verification window: 8 `INFO` (the 3 smoke-test HTTP requests, all status 200, plus routine request logging), 2 `NOTICE` (Cloud Audit Log entries confirming `"Ready condition status changed to True for Service rajadhaniyam-api-production"`). **Zero `ERROR`/`WARNING`/`CRITICAL` entries, zero 5xx responses, zero Prisma/database/missing-env-var/auth errors found.**
+
+### D. Storage check
+
+Per Phase 13E, `SUPABASE_URL` is required only for admin image uploads (`apps/api/src/modules/uploads/storage.ts`) — **it was not included in this deployment** (kept identical to the Phase 13A-approved command, which mirrors staging's current gap). This means **admin product-image upload on production will fail with a 503** (`"Image upload isn't configured"`) until `SUPABASE_URL` is added as a non-secret env var. No write/upload test was performed (correctly out of scope for read-only verification). This is a known, pre-existing gap (same as staging), not a new regression from this deployment — flagged as a remaining blocker below.
+
+### E. Rollback
+
+Not needed — deployment succeeded cleanly on the first attempt. No changes made to Render, DNS, or Cloudflare as a result of this phase.
+
+### Remaining blockers
+
+1. **`SUPABASE_URL` still not set on production** (or staging) — admin image uploads will fail until added (`gcloud run services update rajadhaniyam-api-production --update-env-vars=SUPABASE_URL=https://okoalheebdrszwkiombn.supabase.co`, not yet run, needs approval).
+2. **Production Razorpay webhook still points at the wrong service** (`rajadhaniyam-storefront.onrender.com` instead of the API) — client's action, not blocking checkout today.
+3. Production Cloud Run is deployed but **carries zero live customer traffic** — nothing points at it yet (no DNS, no Cloudflare Worker attached). It shares the same production Supabase database as staging and Render, so it's now a third consumer of that same data — harmless for reads, same shared-database caution applies to any future write-path testing against it.
+4. Cloudflare production Worker and DNS cutover remain fully out of scope, exactly as instructed — not started.
+
+Render, `rajadhaniyam.com`, Supabase, DNS, Cloudflare, and Razorpay configuration are all unchanged by this phase.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
