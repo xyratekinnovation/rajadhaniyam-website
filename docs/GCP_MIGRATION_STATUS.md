@@ -28,8 +28,8 @@ Cloudflare Workers preview (storefront, this       │         │
 | Production storefront | https://rajadhaniyam-storefront.onrender.com | Live, unaffected by this work |
 | Production admin | https://rajadhaniyam-admin.onrender.com | Live, unaffected |
 | Production API | https://rajadhaniyam-api.onrender.com | Live — **rollback target, must stay running** |
-| Cloudflare storefront preview | https://rajadhaniyam-storefront-preview.xyratekinnovation.workers.dev | Live, currently points at Render API |
-| Cloud Run API (staging) | https://rajadhaniyam-api-staging-855749773400.asia-south1.run.app | Deployed, **publicly reachable** (via `--no-invoker-iam-check`, no org policy changed — see below), verified healthy; not yet connected to the Cloudflare preview |
+| Cloudflare storefront preview | https://rajadhaniyam-storefront-preview.xyratekinnovation.workers.dev | Live — **now points at Cloud Run staging API** (as of 2026-09-17, Phase 8) |
+| Cloud Run API (staging) | https://rajadhaniyam-api-staging-855749773400.asia-south1.run.app | Deployed, publicly reachable, verified healthy, **now actively serving the Cloudflare preview** — full test matrix passed (see Phase 8 below) |
 
 ## GCP project
 
@@ -66,8 +66,8 @@ Render continues running independently as rollback throughout and after.
 - [x] `/health` verified on Cloud Run (200, via authenticated test request — see blocker below)
 - [x] DB connectivity verified from Cloud Run (`GET /products` returned real Supabase data)
 - [x] Public-access blocker resolved (`--no-invoker-iam-check`, no org policy changed — see below)
-- [ ] Cloudflare preview repointed at Cloud Run API — not blocked anymore, pending explicit approval for this next phase
-- [ ] Manual page-by-page verification against Cloud Run
+- [x] Cloudflare preview repointed at Cloud Run API — see "Phase 8: Cloudflare Preview → Cloud Run" below
+- [x] Manual page-by-page verification against Cloud Run — 13/13 test scenarios, full results below
 - [ ] Performance/stability comparison vs Render
 
 ## Environment variables required (names only — no values here or anywhere in git)
@@ -172,14 +172,79 @@ throughout), and the container image/digest is unchanged.
 - `gcloud run services get-iam-policy`: still an **empty policy** (`etag: ACAB`, no bindings) — confirms no `allUsers` binding exists; public access came entirely from the invoker-check-disable mechanism
 - `iam.allowedPolicyMemberDomains` re-checked after the change: still `allowedValues: [C014947ex]`, byte-for-byte identical to before — **org policy was never touched**
 
-**Still not done**: the Cloudflare Workers preview has not been repointed
-at this URL yet (`VITE_API_BASE_URL` unchanged) — that's the explicit next
-phase, pending separate approval.
+## Phase 8: Cloudflare Preview → Cloud Run (2026-09-17)
+
+### A. Preview configuration changed
+
+`VITE_API_BASE_URL` — a pure **Vite build-time env var** (`apps/storefront/src/services/api/client.ts:4`, `import.meta.env["VITE_API_BASE_URL"]`), not a Wrangler `vars` entry, not a runtime binding, not hardcoded. No `.env`/`.dev.vars` file existed for the storefront and `wrangler.json` has no `vars` block — the live preview's previous value was set purely as an ad-hoc shell variable at whoever's last build. Confirmed *before* changing anything, by inspecting the actual rendered page (not the bundle): hero/category images resolved to `rajadhaniyam-storefront.onrender.com`, proving the preview was on Render.
+
+Changed by rebuilding with the var set to the Cloud Run URL and redeploying to the **same named Worker** (`rajadhaniyam-storefront-preview`, per `wrangler.json`):
+```
+VITE_API_BASE_URL=https://rajadhaniyam-api-staging-855749773400.asia-south1.run.app \
+  bun run --cwd=apps/storefront build:cf
+bun run --cwd=apps/storefront deploy:cf-preview
+```
+No application source was modified — this is a pure build/deploy operation. Confirmed via `wrangler whoami` + `wrangler deployments list` that only this one Worker exists under the Cloudflare account; there is no separate "production" Cloudflare Worker for the storefront (production storefront is Render) to accidentally affect.
+
+### B. Preview deployment result
+
+Succeeded — `wrangler deploy` uploaded 24 changed assets, new Version ID `ffd2e4f5-d158-4a21-944c-5c91da8da5ba`, same URL (`https://rajadhaniyam-storefront-preview.xyratekinnovation.workers.dev`). `GET /` → `200`.
+
+### C. Proof the preview now uses Cloud Run (not assumed from a 200)
+
+Two independent checks, both after redeploy:
+1. **Rendered page inspection**: hero/category image URLs now resolve to `rajadhaniyam-storefront-preview.xyratekinnovation.workers.dev` (was `rajadhaniyam-storefront.onrender.com` before) — this can only happen if the SSR data came from Cloud Run, since Cloud Run's `STOREFRONT_URL` env var is set to this exact preview URL while Render's is set to Render's own storefront URL.
+2. **Cloud Run access logs**: every request in the test session below (register, login, cart, checkout, orders — real POST/PATCH/DELETE calls) appears in `rajadhaniyam-api-staging`'s own logs with matching timestamps, including real writes (`POST 201 /auth/register`, `POST 201 /checkout`).
+
+### D. Full test matrix (13/13 scenarios)
+
+| # | Test | Result | Notes |
+|---|---|---|---|
+| 1 | Homepage | PASS | Real data, correct images from Cloud Run |
+| 2 | Shop/product listing | PASS | |
+| 3 | Product details | PASS | |
+| 4 | Search/filter | N/A (pre-existing) | Search icon is a non-functional placeholder in the app itself, unrelated to this migration. Category filter (a real feature) tested separately — PASS |
+| 5 | Register | PASS | `POST 201 /auth/register`, auto-logged-in after |
+| 6 | Login | PASS | Explicit sign-out then sign-in re-tested separately — PASS |
+| 7 | Cart | PASS | Add-to-cart, correct pricing |
+| 8 | Cart quantity update | PASS | 1→2, price/badge updated correctly |
+| 9 | Checkout page | PASS | Razorpay UPI/Card/Netbanking now shown as real selectable options (test-mode keys configured) — no payment was triggered, per instructions |
+| 10 | Address flow | PASS | Shipping address form within checkout |
+| 11 | Account page | PASS | Correct name/email shown |
+| 12 | Orders page | PASS | Order #RJD32963552 (COD, ₹264) shown correctly |
+| 13 | Admin access | N/A | Admin panel isn't part of this migration — `ADMIN_URL`/footer link points at Render's real admin (`https://rajadhaniyam-admin.onrender.com`); this preview build's `VITE_ADMIN_URL` wasn't set, so the *footer link* falls back to `localhost:4001` on this specific preview build — cosmetic, pre-existing, unrelated to the API migration |
+
+A real COD test order was placed to verify the full write path (checkout → order creation → stock decrement), then **cleaned up immediately after** (stock restored, order and test customer account deleted) — the same practice used throughout this project's earlier phases. No Razorpay payment was made.
+
+### E. API errors
+
+**None.** Every request across the entire ~3-minute test session (checked via full network log, not sampled) returned 2xx. Zero console errors in the browser throughout.
+
+### F. Cloud Run logs/metrics observed
+
+Logs show the complete, correctly-ordered request sequence for every action taken (register → login → cart → checkout → orders), each real mutation preceded by a successful `OPTIONS` CORS preflight (204) — direct proof CORS, auth headers, and cookie/session handling all work correctly cross-origin (Worker origin → Cloud Run origin). No 4xx/5xx anywhere in the logs.
+
+`gcloud run revisions describe` showed `desiredReplicas: 1` throughout — the min-instance stayed warm for the whole session, so **no cold starts occurred** during testing (a direct, observed benefit of `min-instances: 1` vs. Render's free-tier behavior this migration set out to evaluate). Detailed CPU/memory time-series graphs weren't pulled (no straightforward `gcloud` CLI subcommand for that; would need the Cloud Console UI or a raw Monitoring API call) — not attempted, since the qualitative signal (zero errors, zero latency spikes, single warm instance) already answered the question this test was checking. No scaling configuration was changed.
+
+### G. Rollback procedure (documented, not executed)
+
+Reversible in one command, no DNS or Render change involved:
+```
+VITE_API_BASE_URL=https://rajadhaniyam-api.onrender.com \
+  bun run --cwd=apps/storefront build:cf
+bun run --cwd=apps/storefront deploy:cf-preview
+```
+This rebuilds and redeploys the same named Worker pointing back at Render. The preview's URL (`*.workers.dev`, Cloudflare-managed) never changes either way.
+
+### H. Git status
+
+No application source changed — this phase was pure build/deploy operations (`build:cf` + `wrangler deploy`) plus this documentation update. `git status` on `migration/cloudflare-storefront` was clean before this doc edit.
 
 ## Tests completed
 
 - Manual verification only — **no automated E2E suite exists in this repo**. Prior "E2E testing" (login/cart/checkout etc.) was done interactively via a browser automation tool, not a checked-in test suite. This should be decided on explicitly before claiming E2E coverage for Cloud Run.
-- Confirmed the API's `PORT` handling is Cloud-Run-compatible by reading `apps/api/src/config/env.ts` and `apps/api/src/index.ts` (no live Cloud Run test yet, since nothing is deployed there).
+- Confirmed the API's `PORT` handling is Cloud-Run-compatible by reading `apps/api/src/config/env.ts` and `apps/api/src/index.ts`.
+- **Phase 8 (2026-09-17)**: full 13-scenario manual test matrix against Cloudflare Preview → Cloud Run Staging → Supabase, all passing or correctly N/A. See "Phase 8" section above for the complete breakdown.
 
 ## Remaining tasks
 
