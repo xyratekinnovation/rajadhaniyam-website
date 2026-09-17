@@ -907,6 +907,24 @@ Per instructions, **secrets were not created or populated without explicit appro
 
 Waiting for explicit approval before creating any of these secret objects.
 
+## Phase 14 (continued): Production secrets created (2026-09-17)
+
+With explicit approval, 5 of the 7 planned production secret objects were created in Secret Manager. No values printed at any point — DB/Supabase values were piped directly from the staging secret into the new one via `gcloud secrets versions access | gcloud secrets versions add`; JWT/session values were freshly generated with `openssl rand -hex 32` and piped in the same way.
+
+| Secret | Created? | Version | Value source |
+|---|---|---|---|
+| `DATABASE_URL_PRODUCTION` | Yes | 1 | Copied from staging's `DATABASE_URL` (same underlying Supabase project, confirmed Phase 12A) |
+| `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION` | Yes | 1 | Copied from staging's `SUPABASE_SERVICE_ROLE_KEY` (same project) |
+| `JWT_SECRET_PRODUCTION` | Yes | 1 | Freshly generated (`openssl rand -hex 32`) — independent from staging's |
+| `SESSION_SECRET_PRODUCTION` | Yes | 1 | Freshly generated (`openssl rand -hex 32`) — independent from staging's |
+| `PAYMENT_WEBHOOK_SECRET_PRODUCTION` | Yes (container only) | 0 | Empty — no value until the production Razorpay webhook is actually registered later in the cutover |
+| `PAYMENT_PROVIDER_KEY_PRODUCTION` | **Not created** | — | Left entirely for the client — requires their Razorpay **LIVE** Key ID, entered directly in the GCP Console |
+| `PAYMENT_PROVIDER_SECRET_PRODUCTION` | **Not created** | — | Same — client's Razorpay LIVE Key Secret, entered directly |
+
+Full current secret list (names only): `DATABASE_URL`, `DATABASE_URL_PRODUCTION`, `JWT_SECRET`, `JWT_SECRET_PRODUCTION`, `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET`, `PAYMENT_WEBHOOK_SECRET_PRODUCTION`, `SESSION_SECRET`, `SESSION_SECRET_PRODUCTION`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION`.
+
+**Remaining blocker before Phase 13A's deploy command can run**: `PAYMENT_PROVIDER_KEY_PRODUCTION` and `PAYMENT_PROVIDER_SECRET_PRODUCTION` still need to be created by the client (Secret Manager → Create secret → paste the Razorpay LIVE Key ID/Secret) before the production Cloud Run deploy can include them. Staging, Render, Supabase, DNS, and Cloudflare remain untouched.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
