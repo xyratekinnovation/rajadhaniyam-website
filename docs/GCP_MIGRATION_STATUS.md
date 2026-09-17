@@ -59,9 +59,9 @@ Render continues running independently as rollback throughout and after.
 - [x] GCP project `xyratek-websites` confirmed accessible (org-owned, created 2026-09-17)
 - [x] Billing account linked to the project (required before any API could be enabled)
 - [x] GCP APIs enabled: Cloud Run Admin API, Cloud Build API, Artifact Registry API, Secret Manager API
-- [ ] Artifact Registry Docker repository created
-- [ ] Secrets created in Secret Manager (none created — Razorpay secrets explicitly deferred; DB/JWT/session secrets not yet needed until a build/deploy step requires them)
-- [ ] Cloud Run API image built
+- [x] Artifact Registry Docker repository created: `rajadhaniyam-api` (asia-south1)
+- [ ] Secrets created in Secret Manager (none created — Razorpay secrets explicitly deferred; DB/JWT/session secrets not yet needed until a deploy step requires them)
+- [x] Cloud Run API image built and pushed — see "Artifact Registry / build" section below
 - [ ] Cloud Run API deployed
 - [ ] `/health` verified on Cloud Run
 - [ ] DB connectivity verified from Cloud Run
@@ -96,7 +96,20 @@ Render continues running independently as rollback throughout and after.
 - Installed `gcloud` CLI locally and authenticated as `monisha@xyratek.in`.
 - Linked billing account `01A483-864B03-A52A14` to `xyratek-websites` (was required — API enablement fails without it).
 - Enabled the 4 required GCP APIs (Cloud Run, Cloud Build, Artifact Registry, Secret Manager).
+- Created Artifact Registry Docker repository `rajadhaniyam-api` in `asia-south1`.
+- Granted the project's Compute Engine default service account (`855749773400-compute@developer.gserviceaccount.com`, used by Cloud Build here) three IAM roles it didn't have by default on this new project: `roles/storage.objectViewer` (read the uploaded source tarball), `roles/artifactregistry.writer` (push the built image), `roles/logging.logWriter` (build log write access). None of these are secrets; they're standard IAM role grants on the project's own service account, required for the build pipeline to function at all on a freshly created project.
+- Added `cloudbuild.yaml` (repo root) and `.gcloudignore` (repo root) — build/deploy config files, not application source. `cloudbuild.yaml` exists because the API's Dockerfile lives at `apps/api/Dockerfile`, not the repo root, and `gcloud builds submit --tag` only supports a Dockerfile at the source root; an explicit config was the only way to keep building `apps/api/Dockerfile` unmodified from a repo-root context (required for the Bun workspace).
+- Built and pushed the API image via Cloud Build — see "Artifact Registry / build" below. **The existing `apps/api/Dockerfile` required zero modifications** — it built and ran `bun install` + `prisma generate` successfully unchanged.
 - No production system touched: Render, Cloudflare production, DNS, and Razorpay (production webhook and credentials) remain completely untouched throughout.
+
+## Artifact Registry / build
+
+- **Repository**: `rajadhaniyam-api`, region `asia-south1`, format Docker
+- **Image**: `asia-south1-docker.pkg.dev/xyratek-websites/rajadhaniyam-api/rajadhaniyam-api:f2196591fa87` (tag = short git SHA of the `migration/cloudflare-storefront` commit this was built from, `f219659`)
+- **Digest**: `sha256:2d2861c7f81b52cdbfa306004bfd286404f2e69f0726d5d550793905647c2568`
+- **Build ID**: `4edce21d-0ec7-4df0-8c62-29cf6f3a2d77` (2m3s, status SUCCESS)
+- **Dockerfile used**: `apps/api/Dockerfile`, unmodified, via `cloudbuild.yaml`'s explicit `-f` flag; build context = repo root
+- Not yet deployed to Cloud Run — image exists in Artifact Registry only
 
 ## Tests completed
 

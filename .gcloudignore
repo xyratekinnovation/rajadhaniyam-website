@@ -1,0 +1,37 @@
+# Controls what gets uploaded to Cloud Build as source — separate from
+# .dockerignore (which controls what the Docker build itself sees). Created
+# explicitly for the Cloud Run migration test so `gcloud builds submit`
+# doesn't prompt interactively to generate one, and so node_modules/.env/.git
+# never leave this machine as part of the build context upload.
+
+.git
+.gcloudignore
+.gitignore
+
+node_modules
+**/node_modules
+dist
+**/dist
+dist-ssr
+.output
+**/.output
+.vinxi
+.tanstack
+.tanstack/**
+.nitro
+.wrangler
+**/.wrangler
+*.local
+
+# Never upload real secrets
+.env
+.env.*
+!.env.example
+packages/database/prisma/.env
+.dev.vars
+
+packages/database/generated/
+
+.vscode
+.idea
+*.log

@@ -1,0 +1,17 @@
+# Cloud Build config for the Cloud Run migration staging test (see
+# docs/GCP_MIGRATION_STATUS.md). Builds apps/api's existing Dockerfile
+# unmodified, from the repo root as build context (required — this is a Bun
+# workspace monorepo, apps/api depends on workspace packages present
+# alongside it). Not used by Render, which builds directly from
+# apps/api/Dockerfile via render.yaml's dockerfilePath/dockerContext.
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-f"
+      - "apps/api/Dockerfile"
+      - "-t"
+      - "${_IMAGE}"
+      - "."
+images:
+  - "${_IMAGE}"
