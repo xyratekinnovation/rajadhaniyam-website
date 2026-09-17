@@ -941,9 +941,17 @@ Verified via `gcloud secrets versions list` (names/counts only) — **all 7 prod
 | `PAYMENT_PROVIDER_SECRET_PRODUCTION` | 1 | **New** — client-populated, not independently re-checked (paired with the Key ID above by Razorpay's own design) |
 | `PAYMENT_WEBHOOK_SECRET_PRODUCTION` | 1 | **New** — client-populated from an already-registered Razorpay webhook |
 
-**Open question raised back to the client**: a populated `PAYMENT_WEBHOOK_SECRET_PRODUCTION` implies a webhook has already been registered on Razorpay's side, but production Cloud Run doesn't exist yet — there is no production URL for a webhook to call. Asked the client which URL that webhook currently points at (e.g. the existing Render production URL already documented in `docs/DEPLOYMENT.md`, or a not-yet-live Cloud Run URL) so this document and the cutover plan can reflect the real state. **Not yet answered as of this entry.**
+**Open question raised back to the client**: a populated `PAYMENT_WEBHOOK_SECRET_PRODUCTION` implies a webhook has already been registered on Razorpay's side, but production Cloud Run doesn't exist yet — there is no production URL for a webhook to call. Asked the client which URL that webhook currently points at.
 
-**All 7 production secrets are now populated.** The Phase 13A production Cloud Run deploy command is technically unblocked on the secrets front — deployment itself still requires explicit client approval before executing, per standing process.
+**Answer: `https://rajadhaniyam-storefront.onrender.com`** — ⚠️ **this is misconfigured.**
+
+That's the **storefront** service (the SSR frontend, `rajadhaniyam-storefront` on Render), not the **API** service. The `/payments/webhook` route only exists on the API (`apps/api/src/modules/payments/payments.routes.ts`) — the storefront has no such route. As currently registered, every webhook delivery attempt from Razorpay hits the storefront and gets a 404; nothing is being processed.
+
+**Impact assessment**: not a checkout-breaking issue today — Phase 9A confirmed the primary payment-completion path (`POST /payments/verify`, client-side signature verification) does not depend on the webhook succeeding or even existing. The webhook exists only as a backup for the case where a successful payment's verify call never reaches the server (e.g. the browser drops connection right after Razorpay's checkout succeeds) — with it misdirected, that backup silently does nothing, which is a real but narrow gap, not an active outage.
+
+**Correct value**: `https://rajadhaniyam-api.onrender.com/payments/webhook` — the existing, already-documented Render production API webhook URL (per `docs/DEPLOYMENT.md`). **Not changed by the assistant** — per this migration's standing restriction on ever creating/modifying Razorpay webhooks, this is the client's own action to take (Razorpay Dashboard → Settings → Webhooks → edit URL; the existing secret can stay, no need to regenerate). This will need to be updated a second time once production actually cuts over to the Cloud Run URL (or a future `rajadhaniyam.in` API subdomain) — flagging now so it isn't missed at that point either.
+
+**All 7 production secrets are now populated.** The Phase 13A production Cloud Run deploy command is technically unblocked on the secrets front — deployment itself still requires explicit client approval before executing, per standing process. The webhook misconfiguration above is independent of the Cloud Run deployment and does not block it.
 
 ## Safety restrictions (standing, for every future session on this migration)
 
