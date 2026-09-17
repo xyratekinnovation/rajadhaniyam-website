@@ -274,6 +274,109 @@ worker pointing back at `https://rajadhaniyam-api.onrender.com`. No DNS,
 database, master branch, or production Razorpay configuration is ever
 touched by this migration, so there is nothing else to unwind.
 
+## Phase 9: Razorpay TEST verification + production readiness inspection (2026-09-17)
+
+### A. Razorpay implementation — how it actually works
+
+Full flow: **Storefront → `POST /checkout` → Razorpay order created → Checkout.js opens client-side → user pays → `POST /payments/verify` (HMAC signature check) → DB marked paid → (optional) `POST /payments/webhook` as a backup path.**
+
+- `POST /checkout` (`apps/api/src/modules/orders/orders.routes.ts`, `orders.service.ts createOrder`) — creates `Order` + `OrderItem`s + a `Payment` row (`status: PENDING`) in one Prisma transaction, decrements `ProductVariant.stock`. If the order is online-payment (not COD), it then calls `createRazorpayOrder()` and returns a `RazorpayCheckoutPayload` (`keyId, orderId, amount, currency, prefill, ...`) to the browser. The Key ID is sent to the browser by design — Razorpay's own architecture, not a leak.
+- `openRazorpayCheckout()` (`apps/storefront/src/lib/razorpay.ts`) — loads `checkout.razorpay.com/v1/checkout.js`, opens the modal. Success resolves with `{razorpay_payment_id, razorpay_order_id, razorpay_signature}`; **dismissing the modal rejects with `Error("Payment cancelled")`**, giving the frontend a reliable cancel signal.
+- `POST /payments/verify` (`payments.routes.ts` → `payments.service.ts verifyCheckoutPayment`) — the **primary path that marks an order paid**. Re-fetches the order, confirms the Razorpay order ID matches, verifies `HMAC_SHA256(razorpayOrderId|razorpayPaymentId, keySecret)` against the client-supplied signature using `timingSafeEqual`, then calls `markPaymentPaid`. This does **not** depend on the webhook succeeding or even existing.
+- `POST /payments/webhook` — a secondary/backup path. Verifies `x-razorpay-signature` against the raw body using `PAYMENT_WEBHOOK_SECRET`; on `payment.captured` calls the same `markPaymentPaid` (idempotent — checks `paymentStatus !== "paid"` first), on `payment.failed` calls `markPaymentFailed`. Returns `{handled:false}` for anything it can't match, which stops Razorpay's retry loop.
+- `GET /payments/:orderId/status` — simple read of `paymentStatus`/`status`.
+- **Cancelled checkout is not auto-cleaned**: `checkout.tsx`'s submit handler catches the `openRazorpayCheckout` rejection, shows an error, and returns — the `Order`/`Payment` rows stay `PENDING`/`PENDING` with no backend call. Not a bug in the payment-security sense (a pending order is never treated as paid), just means abandoned checkouts accumulate as pending orders unless cleaned up separately.
+
+### B. Razorpay credential status on Cloud Run staging — ⚠️ BLOCKED
+
+Checked via `gcloud secrets versions access` piped straight into a prefix match (`rzp_test_` vs `rzp_live_`) so no key value was ever printed or logged.
+
+| Secret | Exists? | Versions | Mode |
+|---|---|---|---|
+| `PAYMENT_PROVIDER_KEY` | Yes | 1 | **LIVE** (`rzp_live_...` prefix) |
+| `PAYMENT_PROVIDER_SECRET` | Yes | 1 | Not independently checked — Razorpay always pairs Key ID/Secret mode, so the Key ID result is conclusive |
+| `PAYMENT_WEBHOOK_SECRET` | No | — | N/A (intentional, see Phase 7 note above) |
+
+**This is a LIVE credential, not TEST**, despite this doc's own "Environment variables" section above stating it should be TEST-mode-only for staging. Per standing instructions, Phase 9D (test payment) and 9E (failure/cancel test) were **not attempted** — no payment of any kind was made against these credentials in this phase. Phase 8's checkout-page test (row 9 in that table) only reached the payment-method-selection screen and never submitted a payment, so no live charge occurred at any point in this migration.
+
+**To unblock**: replace both secret values with Razorpay **Test Mode** credentials (Razorpay Dashboard → Test Mode toggle → Settings → API Keys → generate test Key ID/Secret, `rzp_test_...` prefix) by adding a new secret version to the existing `PAYMENT_PROVIDER_KEY`/`PAYMENT_PROVIDER_SECRET` Secret Manager secrets (Cloud Run reads `:latest`, so no redeploy needed once the new version is added).
+
+### C. Webhook strategy (code-inspection only, no live test required)
+
+1. Signature verification alone (`/payments/verify`) is sufficient to mark an order paid — confirmed above.
+2. The webhook is **not required** for the primary success path.
+3. The app can be safely TEST-mode-verified without any webhook configured (as already planned — `PAYMENT_WEBHOOK_SECRET` isn't set on staging).
+4. Staging webhook URL, for reference only — **not created/registered**: `https://rajadhaniyam-api-staging-855749773400.asia-south1.run.app/payments/webhook`
+
+### D–F. Test payment / verification / failure-cancel test
+
+**Not performed.** Blocked by finding B (LIVE credentials on staging). No test data was created in this phase.
+
+### G. Current production infrastructure (read-only inspection)
+
+- **Storefront**: Render, Docker (`apps/storefront/Dockerfile`), `https://rajadhaniyam-storefront.onrender.com` — no custom domain configured (`render.yaml` has no custom domain block; `docs/DEPLOYMENT.md`'s "Custom domain" section is written as a future TODO — `rajadhaniyam.com` "once ready", not yet done).
+- **Admin**: Render, static build, `https://rajadhaniyam-admin.onrender.com`.
+- **API**: Render, Docker, `https://rajadhaniyam-api.onrender.com` — CORS origins are `STOREFRONT_URL` + `ADMIN_URL` + `EXTRA_CORS_ORIGINS` (currently includes the Cloudflare preview origin as a temporary addition for this migration; see `render.yaml` comment).
+- **DNS**: not managed anywhere yet — no custom domain exists in production, so there's no DNS delegation to change as part of a future migration (this simplifies the eventual cutover: it's a first-time DNS setup, not a migration of existing records).
+- **Cloudflare**: only the preview Worker (`rajadhaniyam-storefront-preview`, this branch) exists. No production Cloudflare Worker, zone, or DNS configuration exists yet.
+- **Razorpay production webhook**: `docs/DEPLOYMENT.md` documents the intended webhook URL as `https://rajadhaniyam-api.onrender.com/payments/webhook`, to be created "after you create the webhook" in the Razorpay Dashboard — this doc cannot confirm from code alone whether that webhook has actually been registered on Razorpay's side (that's dashboard-side state, not visible here).
+- **Production env vars** (names only): `NODE_ENV`, `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `SESSION_SECRET`, `STOREFRONT_URL`, `ADMIN_URL`, `EXTRA_CORS_ORIGINS`, `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET`, `PAYMENT_WEBHOOK_SECRET` (all `render.yaml`, `sync: false` ones populated directly in the Render dashboard, never committed).
+
+### H. Proposed production migration plan (NOT executed — planning only)
+
+Target: `Client domain → Cloudflare (production Worker) → Cloud Run (production API) → Supabase`, Razorpay LIVE → Cloud Run production API, Render kept as rollback during stabilization.
+
+1. Create a **separate** Cloud Run service `rajadhaniyam-api-production` (never reuse the staging service) in the same project/region, deployed from a reviewed/tagged image (not directly from a staging build).
+2. Create dedicated production secrets in Secret Manager (`PAYMENT_PROVIDER_KEY`/`SECRET` = real LIVE Razorpay keys, entered directly by the client/owner, never by the assistant) — kept fully separate from the staging secrets used in this migration.
+3. Deploy a **new, separate** Cloudflare Worker for production storefront (not the existing preview Worker), built with `VITE_API_BASE_URL` pointed at the new production Cloud Run URL.
+4. Point the client's real domain's DNS at Cloudflare (first-time setup, since no custom domain exists yet — see G above), then at the production Worker.
+5. Update production API CORS (`STOREFRONT_URL`/`EXTRA_CORS_ORIGINS`) to the new domain.
+6. Register the Razorpay production webhook against the new Cloud Run production API URL (only after cutover is confirmed stable) — do not touch the existing Render-pointed webhook until ready to cut over.
+7. Run the same manual test matrix used in Phase 8 against production Cloud Run before sending real traffic.
+8. Keep Render running, untouched, as instant rollback (swap DNS/Worker var back) until the new stack has proven stable for an agreed stabilization period.
+9. Only after stabilization: decommission the Render services and the old Razorpay webhook.
+
+Explicitly not done in this phase: no production Cloud Run service created, no DNS changed, no production Cloudflare Worker created, no Razorpay production webhook changed.
+
+### I. Production readiness checklist
+
+**Infrastructure**
+- [ ] Dedicated production Cloud Run service (separate from staging)
+- [ ] Min-instances sized for real traffic (staging used 1; revisit for production load)
+- [ ] Production secrets created independently of staging secrets
+- [ ] IAM reviewed for production service (who can deploy/view logs/access secrets)
+- [ ] Logging/alerting configured (Cloud Monitoring alert policies — none exist yet for staging or would exist for production)
+
+**Application**
+- [ ] Auth, products, cart, checkout, orders, admin all re-verified against production Cloud Run (same matrix as Phase 8)
+- [ ] Supabase Storage URLs/buckets confirmed correct for production
+
+**Payments**
+- [ ] Razorpay LIVE credentials entered directly by the client (never via assistant) into production secrets only
+- [ ] Production webhook registered and its `PAYMENT_WEBHOOK_SECRET` set
+- [ ] Failure/cancel behavior re-verified in LIVE mode conceptually (via Razorpay's own live-mode test tools/small real transaction under the client's control, not this assistant's)
+- [ ] Refund/cancel-order operational process defined (not currently implemented in code beyond order status — confirm if a refund flow is needed)
+
+**Production deployment**
+- [ ] Dedicated production Cloudflare Worker (not the preview one)
+- [ ] Client domain DNS pointed at Cloudflare
+- [ ] SSL/TLS via Cloudflare (automatic once DNS is proxied)
+- [ ] CORS updated to the final domain
+- [ ] Session/cookie config re-verified cross-origin at the new domain
+
+**Rollback**
+- [ ] Documented one-step DNS/Worker-var rollback to Render (pattern already proven in Phase 8's rollback procedure)
+- [ ] Razorpay webhook rollback plan (keep old webhook active until new one is proven)
+
+**Client handover**
+- [ ] This document + a plain-language runbook handed to the client
+- [ ] Credential transfer process agreed (client enters their own production secrets directly, not via the assistant)
+- [ ] Admin training / support process defined
+
+### J. Documentation
+
+This section was committed and pushed to `migration/cloudflare-storefront` only, per standing instructions — not merged to `master`.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
