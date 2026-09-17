@@ -740,6 +740,140 @@ Production and staging must be treated as **environments sharing one database**,
 
 This section committed and pushed to `migration/cloudflare-storefront` only — not merged to `master`. No application code modified this phase (docs-only change, as instructed).
 
+## Phase 13: Exact production deployment configuration (2026-09-17)
+
+Configuration prepared and documented only — nothing deployed, no DNS/Supabase/Render/Razorpay changes. `rajadhaniyam.com` not touched.
+
+**Standing warning, restated**: staging (`rajadhaniyam-api-staging`) and Render production share one Supabase database (`okoalheebdrszwkiombn`, confirmed Phase 12A). Any staging write test still requires explicit approval and a cleanup plan — nothing about this phase's planning changes that.
+
+### A. Production Cloud Run — exact configuration
+
+Mirrored directly from staging's live `gcloud run services describe` output (same proven values, not re-derived):
+
+| Setting | Value |
+|---|---|
+| Service | `rajadhaniyam-api-production` |
+| Region / Project | `asia-south1` / `xyratek-websites` |
+| Image | `asia-south1-docker.pkg.dev/xyratek-websites/rajadhaniyam-api/rajadhaniyam-api@sha256:2d2861c7f81b52cdbfa306004bfd286404f2e69f0726d5d550793905647c2568` (existing verified digest, no rebuild) |
+| CPU / Memory | 1 vCPU / 512Mi |
+| Min / Max instances | 1 / 3 |
+| Concurrency | 80 |
+| CPU allocation | request-based (no always-allocated-CPU flag) |
+| Public access | `run.googleapis.com/invoker-iam-disabled: true` — the same `--no-invoker-iam-check` mechanism proven in Phase 7, no `allUsers` IAM binding, no org-policy interaction |
+
+**Exact commands (not yet executed)** — two-step, mirroring exactly what was actually run for staging:
+```
+gcloud run deploy rajadhaniyam-api-production \
+  --image=asia-south1-docker.pkg.dev/xyratek-websites/rajadhaniyam-api/rajadhaniyam-api@sha256:2d2861c7f81b52cdbfa306004bfd286404f2e69f0726d5d550793905647c2568 \
+  --region=asia-south1 --project=xyratek-websites \
+  --cpu=1 --memory=512Mi \
+  --min-instances=1 --max-instances=3 --concurrency=80 \
+  --set-env-vars=NODE_ENV=production,STOREFRONT_URL=https://rajadhaniyam.in,ADMIN_URL=https://rajadhaniyam-admin.onrender.com \
+  --set-secrets=DATABASE_URL=DATABASE_URL_PRODUCTION:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY_PRODUCTION:latest,JWT_SECRET=JWT_SECRET_PRODUCTION:latest,SESSION_SECRET=SESSION_SECRET_PRODUCTION:latest,PAYMENT_PROVIDER_KEY=PAYMENT_PROVIDER_KEY_PRODUCTION:latest,PAYMENT_PROVIDER_SECRET=PAYMENT_PROVIDER_SECRET_PRODUCTION:latest
+
+gcloud run services update rajadhaniyam-api-production \
+  --region=asia-south1 --project=xyratek-websites \
+  --no-invoker-iam-check
+```
+(Public access is applied as a second step because that's the exact sequence that worked for staging — `--no-invoker-iam-check` at initial `deploy` time was not what was actually exercised in Phase 7.) **Not run.**
+
+### B. Production environment variables
+
+- `NODE_ENV=production` — fixed.
+- `STOREFRONT_URL=https://rajadhaniyam.in` — as specified.
+- `ADMIN_URL`: **`https://rajadhaniyam-admin.onrender.com`** — the admin panel is explicitly out of scope for this migration (same note as staging's config, and confirmed again here: neither this phase's target architecture diagram nor any prior phase proposes moving admin off Render). Production API should point at the real, existing Render admin URL, not a placeholder.
+- `EXTRA_CORS_ORIGINS`: **not required for the final steady state** — once DNS is cut over, `STOREFRONT_URL` (`https://rajadhaniyam.in`) and `ADMIN_URL` already cover the two real production origins. It **will be temporarily useful during pre-cutover verification** (Phase 13I step 4 below), the same way staging's `EXTRA_CORS_ORIGINS` currently holds the Cloudflare preview's `*.workers.dev` origin — production will need its own Worker's `*.workers.dev` URL added temporarily while testing before `rajadhaniyam.in` is attached, then it can be removed once DNS is live and `STOREFRONT_URL` alone is authoritative.
+
+Not applied.
+
+### C. Production secrets — requirement/source/independence
+
+| Secret | Why required | Source | Differs from staging? | Shareable? |
+|---|---|---|---|---|
+| `DATABASE_URL_PRODUCTION` | Prisma's runtime DB connection (`packages/database/prisma/schema.prisma:19`) | Same underlying Supabase project (`okoalheebdrszwkiombn`, per A/E in Phase 12) — value is the same connection string staging uses today | No — same database, confirmed shared | Must remain an independent **secret object** even though the underlying value is currently identical, so IAM/version history don't cross environments |
+| `SUPABASE_SERVICE_ROLE_KEY_PRODUCTION` | Admin image upload via Supabase Storage REST API (`apps/api/src/modules/uploads/storage.ts`) | Same Supabase project as above | No, same project → same key | Independent secret object, same reasoning |
+| `JWT_SECRET_PRODUCTION` | Signs auth tokens | Freshly generated | **Yes — must differ from staging.** Sharing a signing secret across environments would let a staging-issued token authenticate against production | Never shared |
+| `SESSION_SECRET_PRODUCTION` | Signs session cookies | Freshly generated | **Yes — must differ.** Same reasoning as JWT | Never shared |
+| `PAYMENT_PROVIDER_KEY_PRODUCTION` | Razorpay Key ID for order creation/checkout | Client's Razorpay Dashboard, **LIVE** mode | **Yes — must differ.** Staging is TEST-mode (once corrected) or currently LIVE-but-unused; production is the only place real LIVE keys belong | Never shared |
+| `PAYMENT_PROVIDER_SECRET_PRODUCTION` | Razorpay Key Secret, HMAC signature verification | Client's Razorpay Dashboard, **LIVE** mode | Yes — must differ | Never shared |
+| `PAYMENT_WEBHOOK_SECRET_PRODUCTION` | Verifies `x-razorpay-signature` on `/payments/webhook` | Generated by Razorpay when the production webhook is registered (not yet — see H) | Yes — staging doesn't have this secret at all today | Never shared |
+
+None created or populated. No values printed.
+
+### D. Database configuration
+
+- **Production `DATABASE_URL_PRODUCTION`**: confirmed to be the same underlying Supabase connection (project `okoalheebdrszwkiombn`) staging already uses — per the SAME PROJECT finding in Phase 12A, there is no separate production database to point at.
+- **PgBouncer**: `?pgbouncer=true` must be preserved on the production secret's value, exactly as staging's `DATABASE_URL` already has it — this was a real bug hit earlier in this project (see "Known issues" above) and applies identically here.
+- **`DIRECT_URL`**: confirmed **not required at Cloud Run runtime** — `packages/database/prisma/schema.prisma:20` only references it as `directUrl`, used exclusively by Prisma's migration tooling (`prisma migrate`), never by the running application. Not needed as a Cloud Run env var/secret for either staging or production.
+- **Does Prisma require a migration during this deployment?** No — production would connect to the identical, already-migrated schema staging already uses (same database). No new migration is needed or was run.
+
+### E. `SUPABASE_URL` — **REQUIRED** (re-confirmed)
+
+Same conclusion as Phase 12B, re-verified against the current code:
+- `apps/api/src/config/env.ts:13` — `SUPABASE_URL: z.string().optional()` (app boots without it).
+- `apps/api/src/modules/uploads/storage.ts:9-17` — `requireSupabaseConfig()` throws a 503 unless **both** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set; every Storage REST call builds its URL directly from `SUPABASE_URL` (lines 23, 28, 50).
+- No other backend reference; no frontend reference at all.
+
+**Required** for admin product-image uploads to function; not required for auth/cart/checkout/orders (all via `DATABASE_URL`/Prisma). Currently absent from staging's Cloud Run config entirely (confirmed again via `gcloud run services describe` in this phase) — the production env var list in B should include it if image uploads are expected to work in production; **not added anywhere in this phase**.
+
+### F. Production Cloudflare Worker — exact configuration
+
+1. **Config file**: a new file, e.g. `apps/storefront/wrangler.production.json` — the existing `apps/storefront/wrangler.json` has `"name": "rajadhaniyam-storefront-preview"` hardcoded and must not be repurposed; production needs its own file (or a `--name` override at deploy time) so the preview is never at risk of being overwritten.
+2. **Build command**: identical to preview — `bun run --cwd=apps/storefront build:cf` (plain `vite build`, `cloudflare-module` preset, no code changes).
+3. **Required `VITE_*` build-time variables**: `VITE_API_BASE_URL=<production Cloud Run URL>`, `VITE_ADMIN_URL=https://rajadhaniyam-admin.onrender.com`.
+4. **Production API URL placeholder**: exact hostname only known after step A's deploy actually runs (Cloud Run assigns it, e.g. `https://rajadhaniyam-api-production-<hash>-el.a.run.app`) — use as a placeholder until then.
+5. **Compatibility with the preview Worker**: fully compatible — same `compatibility_date`/`compatibility_flags`/build output; only `name`, config file, and the `VITE_*` values differ.
+6. **Production-specific changes needed**: distinct Worker name (`rajadhaniyam-storefront-production`), distinct config file, production env var values, and (once DNS is ready) a Cloudflare Custom Domain attachment — nothing else.
+
+Not deployed. Preview Worker (`rajadhaniyam-storefront-preview`) not touched.
+
+### G. DNS plan (prepared, not executed)
+
+Target: `rajadhaniyam.in` → Cloudflare → production Worker; `www.rajadhaniyam.in` → redirect to `https://rajadhaniyam.in`.
+
+Steps that will eventually be executed (documented only):
+1. **Cloudflare side**: add `rajadhaniyam.in` as a new zone in the Cloudflare account already used for the preview Worker (Add a Site → enter `rajadhaniyam.in` → Cloudflare scans/proposes DNS records, which will be empty/minimal per Phase 11A's finding of no existing records).
+2. **GoDaddy side**: update `rajadhaniyam.in`'s nameservers (currently `ns41`/`ns42.domaincontrol.com`, per Phase 11A) to the two nameservers Cloudflare assigns during step 1 — done in the GoDaddy DNS/domain management panel for **`rajadhaniyam.in` only**, never touching the `.com` domain's own GoDaddy configuration.
+3. Wait for Cloudflare to detect the nameserver change (active-zone status).
+4. In Cloudflare, attach `rajadhaniyam.in` to the production Worker via **Workers Routes** or **Custom Domains** (Custom Domains is simpler — Cloudflare manages the proxied record automatically).
+5. Add a redirect rule (Cloudflare Bulk Redirects or a Page Rule) for `www.rajadhaniyam.in` → `https://rajadhaniyam.in` (301, preserving path).
+6. SSL/TLS: automatic once the zone is active and proxied — no manual certificate work.
+
+**Not executed.** No nameserver change, no Cloudflare zone created, nothing added to GoDaddy.
+
+### H. Razorpay
+
+- **Production webhook URL format**: `https://<production-cloud-run-url>/payments/webhook` (exact hostname known only once A's deploy runs), or `https://rajadhaniyam.in/api/...`-style if a custom API hostname is ever added — not planned currently, direct Cloud Run URL is sufficient (same pattern as staging).
+- **Credentials required**: `PAYMENT_PROVIDER_KEY_PRODUCTION`, `PAYMENT_PROVIDER_SECRET_PRODUCTION` (LIVE mode), `PAYMENT_WEBHOOK_SECRET_PRODUCTION` (generated at webhook creation time).
+- **When TEST credentials should be used**: staging only, for the deferred Phase 9D/E verification during final QA — never in production.
+- **When LIVE credentials should be used**: production only, entered directly by the client, only once production cutover is imminent (not during general prep).
+- **Final payment test sequence** (for final QA, not now): (1) confirm staging holds TEST credentials, (2) run Phase 9D (successful TEST payment) and 9E (failure/cancellation TEST payment) against staging, (3) confirm signature verification and order/payment status consistency, (4) only after production is otherwise fully cut over and stable, register the production webhook and do one small real LIVE payment under the client's own control as a final smoke test.
+- **Explicitly deferred**: no Razorpay testing, webhook creation, or credential change happens in this phase.
+
+### I. Cutover sequence — reversibility and impact
+
+| # | Step | Reversible? | Customer impact | Validation required |
+|---|---|---|---|---|
+| 1 | Deploy `rajadhaniyam-api-production` Cloud Run (per A) | Reversible (delete service) | None — no traffic routed yet | `/health` responds 200 |
+| 2 | Create `_PRODUCTION` secrets, client populates values (per C) | Reversible (delete/replace secrets) | None | Secrets exist, correct count, no values logged |
+| 3 | Verify production Cloud Run via its own `*.run.app` URL | N/A (read-only) | None | `/health`, `/products` (DB read), logs clean |
+| 4 | Build & deploy production Worker (per F), reachable only via its own `*.workers.dev` URL first, `EXTRA_CORS_ORIGINS` on production Cloud Run temporarily includes this Worker's `*.workers.dev` origin (per B) | Reversible (redeploy/delete Worker) | None — not the live domain yet | Full manual test matrix (Phase 8 + 10H) against `*.workers.dev` → production Cloud Run |
+| 5 | Add `rajadhaniyam.in` as a Cloudflare zone (per G step 1) | Reversible (remove zone) | None | Zone created, DNS records reviewed |
+| 6 | Change `rajadhaniyam.in` nameservers at GoDaddy to Cloudflare's (per G step 2) | **Slow to reverse** — propagation delay in both directions; **the real go/no-go point** | None until Cloudflare zone is also serving content — domain currently has no live records | Cloudflare shows zone "active" |
+| 7 | Attach `rajadhaniyam.in` to the production Worker (Custom Domain), set up `www` redirect | Reversible while nameservers already point at Cloudflare | **Domain goes live** — this is the step that makes `rajadhaniyam.in` serve real traffic for the first time | Load `https://rajadhaniyam.in` externally, confirm correct app + SSL |
+| 8 | Remove the temporary `EXTRA_CORS_ORIGINS` entry from production Cloud Run now that `STOREFRONT_URL` alone is correct | Reversible | None | CORS preflight still succeeds from `rajadhaniyam.in` |
+| 9 | Re-run full test matrix against the live domain | N/A (verification) | None (read + controlled test writes against the shared production DB — same caution as any staging test) | All scenarios pass |
+| 10 | Register Razorpay production webhook (per H) | Reversible (remove/repoint webhook) | None | Test event or dashboard confirmation |
+| 11 | Production smoke test incl. one real LIVE payment under client control | Payment itself **not reversible** in the ledger sense (standard for any real transaction) | Real money movement, client-initiated and controlled | Order/payment status consistent, webhook (if used) fires correctly |
+| 12 | Rollback window — Render stays running, pre-cutover DNS state documented, stabilization period | N/A (observation) | None | Monitor logs/error rates |
+| 13 | Decommission Render + unused resources | **Irreversible** — the true point of no return | None if steps 1-12 were clean | Final confirmation from client before executing |
+
+**Rollback mechanism, every step through 12**: revert the Worker's `VITE_API_BASE_URL` to `https://rajadhaniyam-api.onrender.com` and redeploy the same Worker name (Cloudflare stays the front door if nameservers already moved; otherwise nothing customer-facing has changed at all). Render remains untouched and running throughout, exactly as required.
+
+### J. Documentation
+
+This section committed and pushed to `migration/cloudflare-storefront` only — not merged to `master`. No production deployment, DNS, Supabase, Render, or Razorpay change made in this phase.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
