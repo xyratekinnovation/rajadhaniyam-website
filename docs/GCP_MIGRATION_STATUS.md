@@ -1433,6 +1433,96 @@ The client completed Option 1 manually via the Cloudflare Dashboard (this sessio
 
 **`www.rajadhaniyam.in` now correctly and permanently redirects to `https://rajadhaniyam.in`, preserving path and query string, with zero side effects on the root domain or any other part of the stack.**
 
+## Phase 21: Final production QA (2026-09-18)
+
+Production URL tested: `https://rajadhaniyam.in`. Razorpay explicitly out of scope (client unavailable) — no Razorpay access, configuration, or payment attempted anywhere in this phase.
+
+### 1. Customer journey — all PASS, via live browser testing (not just curl)
+
+- **Homepage**: loads correctly, hero/features/categories/bestsellers/testimonials all render, zero console errors.
+- **Navigation**: header menu (Home/Shop/Millets/Nuts & Seeds/Combo Packs) opens and links correctly; footer (Shop categories, About Us, Contact, Shop All, Admin Panel, address/phone/email) all correct — `Contact` link confirmed live (`href="/contact"`), `Admin Panel` link confirmed pointing at the real Render admin URL.
+- **Shop/listing**: all 11 catalog products render with images, prices, category filter, sort, price filter; "Test" product (SKU `test-200`) correctly visible in the public catalog.
+- **Product detail**: images, quantity selector (tested +/-), Ingredients/Nutrition/Shipping accordion tabs, Add to Cart all work — verified live on `Kambu Broken`.
+- **Login / Register**: both render correctly, no console errors. (Login placeholder now correctly reads `admin@rajadhaniyam.in`-style domain on the storefront's own `/login` — the separate Render-hosted **admin app's** login placeholder still shows `.com`, see Admin QA below.)
+- **Cart**: live-tested add → drawer opens with correct item/subtotal/shipping/total; quantity increase recalculates totals correctly (₹95×2=₹190, total ₹239); remove works, empty state renders cleanly. Full PASS.
+- **Checkout**: Contact/Shipping Address/Payment sections all render; all four payment methods present (UPI/GPay/PhonePe, Card, Net Banking, **Cash on Delivery (+₹25)**); order summary, coupon field, totals all correct, including with an empty cart (`₹0`, no crash).
+- **Account / Orders**: correctly auth-gate — unauthenticated visits redirect to `/login` as expected, no errors.
+
+No migration regressions found in the customer journey.
+
+### 2. Search — **PRE-EXISTING NON-FUNCTIONAL**
+
+Confirmed by code inspection, not just observed behavior: `apps/storefront/src/components/site/Header.tsx:78` — the search `<button>` has **no `onClick` handler at all**, purely decorative. Matches the exact finding already documented in Phase 8 ("Search icon is a non-functional placeholder in the app itself, unrelated to this migration"). **Not a regression** — this predates the migration and is unchanged by it.
+
+### 3. Responsive / mobile QA — PASS
+
+Tested via viewport emulation + `document.documentElement.scrollWidth` checks (objective overflow detection, not just visual spot-checks) at **375×812 (mobile)** across `/`, `/shop`, `/product/kambu-broken`, `/cart`, `/checkout`, `/login`, `/register` — **zero horizontal overflow on any page**. Visual screenshots on homepage and cart confirmed clean layout, no overlap, no clipping, buttons within viewport. Spot-checked at **768×1024 (tablet)** on `/shop` and `/checkout` — also clean. No responsive regressions found.
+
+### 4. Controlled production COD test — PASS
+
+Performed as a genuine guest checkout through the live UI (not a database script), using only the dedicated test product:
+
+- **Pre-test stock**: `test-200` at `6` (confirmed via read-only query before starting).
+- Added "Test" (SKU `test-200`) to a fresh guest cart, filled Contact/Shipping Address, selected **Cash on Delivery**, submitted.
+- **Result**: Order **`RJD32150235`** confirmed via UI ("Thank you for your order... Cash on Delivery, please keep the exact amount ready").
+- **Database verification** (read-only): `productName: "Test"`, `qty: 1`, `subtotal: ₹1`, `shipping: ₹25` (COD fee), `total: ₹26` — matches the UI exactly. `payment.provider: "cod"`, `payment.method: "cod"`, `payment.status: "PENDING"` — no Razorpay involvement whatsoever. `userId: null` — guest checkout, no account created (confirmed: total user count unchanged at `1` before and after).
+- **Stock**: decremented exactly `6 → 5`, matching the 1 unit ordered.
+
+### 5. Cleanup — PASS
+
+Cancelled `RJD32150235` immediately after verification, using the same transaction logic the application itself uses for order cancellation (increment `ProductVariant.stock`/`Inventory.quantity` per item, set `Order.status = CANCELLED`) — reproduced directly against the database since no admin session exists in this environment, exactly as done in Phase 19G.
+
+- **Stock restored**: exactly `5 → 6` — confirmed via read-only re-query, matching the pre-test quantity precisely.
+- No `Payment` row modified, no Razorpay call made (matches the app's own cancellation behavior).
+- No unrelated order, product, or inventory record touched (only the one target order and its own variant were ever written to).
+- All temporary verification/cleanup scripts (`apps/api/scripts/_temp_*.ts`) were deleted immediately after use — none committed (`git status` clean).
+
+### 6. Admin QA — partial (reachability only)
+
+`https://rajadhaniyam-admin.onrender.com` loads correctly, login form renders, zero console errors. **Authenticated admin functionality could not be tested** — no admin credentials exist in this session, and none were requested or guessed, per instructions. One observation, not a regression: the admin app's own login placeholder still reads `admin@rajadhaniyam.com` — this is because Render (which hosts the admin app) deploys from `master`, and the Phase 17 fix to this exact placeholder (`apps/admin/src/routes/login.tsx`) exists only on `migration/cloudflare-storefront`, which has never been merged, per the standing rule. Not touched or fixed in this phase (would require deploying to Render, out of scope).
+
+### 7. Production Cloud Run log verification — PASS
+
+Queried `rajadhaniyam-api-production` logs for the full QA window (`2026-09-18T11:20Z` onward): **196 requests** — `147× 200`, `1× 201` (the COD order creation), `48× 204` (CORS preflights). **Zero 4xx, zero 5xx, zero non-INFO severity, zero Prisma/Supabase/CORS/startup errors.** Path breakdown matches the QA session exactly: `/cart`, `/settings/shipping`, `/categories`, `/products` (various filters), `/content/hero`, `/content/banners`, `/cart/items` (add/update/remove), `/products/kambu-broken`, `/products/test`, `/checkout`.
+
+### 8. Image/storage write test — **DEFERRED**
+
+Not tested. An actual upload/replace test would require either real admin credentials (not available) or writing to production Supabase Storage, both outside this phase's safe, non-destructive scope. No result invented — marked `DEFERRED — requires controlled storage write test` with admin access, as instructed.
+
+### 9. Razorpay — explicitly deferred
+
+**Razorpay final verification deferred because the client must access the Razorpay account to update/verify the website/domain configuration. This will be handled later as a separate phase when the client is available.** No Razorpay access, configuration change, or payment attempt occurred anywhere in this phase.
+
+### 10. Final classification
+
+| Area | Status | Evidence | Notes |
+|---|---|---|---|
+| Homepage | PASS | Screenshot + page text, 0 console errors | |
+| Navigation / footer | PASS | Menu + footer links verified live | |
+| Shop / product listing | PASS | 11 products, images, filters, sort | |
+| Product detail | PASS | Images, qty selector, tabs, add-to-cart | |
+| Login / Register | PASS | Render correctly, 0 errors | |
+| Cart (add/update/remove) | PASS | Live-tested, totals recalc correctly | |
+| Checkout render | PASS | All sections + all 4 payment methods render | |
+| Account / Orders auth-gating | PASS | Correct redirect to `/login` | |
+| Search | PRE-EXISTING | No `onClick` in code (`Header.tsx:78`) | Matches Phase 8 finding, not a regression |
+| Mobile responsive (7 pages) | PASS | 0 horizontal overflow, all pages | |
+| Tablet responsive (2 pages) | PASS | 0 horizontal overflow | |
+| Controlled COD test | PASS | Order `RJD32150235`, all fields correct | |
+| COD test cleanup | PASS | Stock restored exactly `5→6` | |
+| Cloud Run logs | PASS | 196 requests, 0 errors | |
+| Admin app reachability | PASS | Loads, 0 console errors | Authenticated QA not possible — no credentials |
+| Admin login placeholder | PRE-EXISTING | `.com` on Render's deployed admin | Branch-isolation artifact (fix exists on migration branch only), not urgent |
+| Footer policy links | PRE-EXISTING | No Privacy/Terms links in app design | Not a migration issue |
+| Image/storage write test | DEFERRED | — | Requires admin access, not attempted |
+| Razorpay verification | DEFERRED | — | Client account access required |
+
+**A. Migration-related issues**: **none found.**
+
+**B. Pre-existing application issues** (not caused by this migration): search button non-functional (placeholder only); no Privacy Policy/Terms of Service links in the footer (app design, no such pages exist); admin app's Render-deployed login placeholder still shows `.com` (will resolve once the migration branch's fixes reach `master`/Render, whenever that's decided).
+
+**C. Deferred, client-dependent work**: Razorpay final verification (client Razorpay account access required); admin-authenticated QA (client admin credentials required); optional image/storage write test (requires admin access); eventual decision on merging `migration/cloudflare-storefront` improvements into `master` for Render/admin to pick them up.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
