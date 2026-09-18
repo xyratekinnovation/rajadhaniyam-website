@@ -1179,6 +1179,57 @@ Not needed — build and deploy both succeeded on the first attempt, no errors a
 4. No write-path (auth/cart/checkout/payment) testing has been performed against the production Worker — correctly deferred per this phase's read-only scope and the shared-database caution.
 5. Cloudflare Custom Domain attachment and GoDaddy nameserver change remain the next gated steps, not started.
 
+## Phase 17: GoDaddy nameserver change done, Cloudflare activation pending (2026-09-18)
+
+Inspection and planning only — no domain attached, no DNS record created, no Worker redeployed, no GoDaddy/Render/Supabase/Razorpay change. All checks below were read-only GET calls (Cloudflare API zone/routes/worker-metadata lookups using the already-authenticated `wrangler` OAuth token, plus public DNS) — no write/POST call was made to Cloudflare at any point.
+
+### A. Current Cloudflare/Worker configuration
+
+- `apps/storefront/wrangler.production.json` — unchanged since Phase 16: `{"name": "rajadhaniyam-storefront-production", "compatibility_date": "2024-09-19", "compatibility_flags": ["nodejs_compat"], "workers_dev": true}`. No `routes` block present.
+- **Zone status, verified directly via Cloudflare's API** (`GET /zones?name=rajadhaniyam.in`): zone id `2431f5fcff752248964e9636b2b52b24`, **`status: "pending"`** (matches the dashboard's "Invalid nameservers" state), assigned nameservers `irena.ns.cloudflare.com` / `tom.ns.cloudflare.com`, original nameservers on record `ns41.domaincontrol.com` / `ns42.domaincontrol.com` (GoDaddy, pre-change).
+- **Independently cross-checked via public DNS** (`dns.google` DoH, not Cloudflare's own view): `rajadhaniyam.in` NS records **already resolve to `irena.ns.cloudflare.com` / `tom.ns.cloudflare.com`** — the registry-level delegation has propagated successfully. Cloudflare's own zone activation is a separate, slightly slower internal check (typically minutes to low hours) that hasn't caught up yet — **this is normal, expected propagation lag, not an error**.
+- Production Worker script metadata confirmed via API: created `2026-09-17T15:22:57Z`, `has_assets: true`, `has_modules: true` — matches the Phase 16 deployment exactly, nothing has changed.
+- **Zero Workers Custom Domains exist yet** (`GET /accounts/.../workers/domains` → empty list) and **zero zone-level Worker Routes exist** (`GET /zones/.../workers/routes` → empty list) — confirmed nothing is attached.
+
+### B. Worker compatibility (re-verified, no changes)
+
+| Check | Result |
+|---|---|
+| Worker name | `rajadhaniyam-storefront-production` |
+| Production API URL baked into build | `https://rajadhaniyam-api-production-855749773400.asia-south1.run.app` — reconfirmed live: `GET /health` → `200 {"status":"ok"}` |
+| `STOREFRONT_URL` (on Cloud Run production) | `https://rajadhaniyam.in` — reconfirmed via fresh homepage fetch: image URLs still resolve to `https://rajadhaniyam.in/assets/...` |
+| Build configuration | Nitro `cloudflare-module` preset, `deployConfig: true`, `workers_dev: true`, no custom domain/route block — unchanged from Phase 16 |
+| SSR | Homepage re-fetched fresh (`200`), real data rendering correctly |
+| Static assets | Unaffected — served via the `ASSETS` binding, same as Phase 16 |
+| Staging API references | None (already confirmed absent from the build bundle in Phase 16; no rebuild has happened since, so this still holds) |
+| Render API references | None |
+| Incorrect/`.com` domain references | None |
+
+**No architecture change is required** — the existing Worker can serve `rajadhaniyam.in` as a Custom Domain exactly as already built; only a domain *attachment*, not a rebuild or redeploy, is needed once the zone activates.
+
+### C. Exact next Cloudflare action (once zone status becomes `Active`)
+
+**Mechanism: Workers Custom Domain** (not a manual "Route," which would require a pre-existing DNS record) — confirmed this is the correct, current Cloudflare mechanism for this setup:
+- **Dashboard path**: Cloudflare Dashboard → Workers & Pages → `rajadhaniyam-storefront-production` → **Settings → Domains & Routes → Add → Custom Domain** → enter `rajadhaniyam.in` → Add Domain.
+- **Equivalent API call** (read-only reference only, not executed): `POST /accounts/{account_id}/workers/domains` with `{"hostname": "rajadhaniyam.in", "zone_id": "2431f5fcff752248964e9636b2b52b24", "service": "rajadhaniyam-storefront-production", "environment": "production"}`.
+- This does **not** require redeploying the Worker — it's a separate binding/attachment operation on the already-deployed script, satisfying "do not deploy a new Worker version unless technically required."
+
+### D. `www.rajadhaniyam.in` handling
+
+Recommended approach: a **Cloudflare Redirect Rule** (zone-level, not application code) — `www.rajadhaniyam.in` → 301 redirect to `https://rajadhaniyam.in$1` (preserving path). This is simpler and safer than a second Custom Domain + in-app redirect logic: it requires no Worker changes, no rebuild, and keeps redirect behavior entirely at Cloudflare's edge. Not created yet — this is the planned approach, to be set up alongside the Custom Domain attachment once the zone is active.
+
+### E. DNS record requirements
+
+**No manual DNS record creation needed for the primary domain.** This is the key distinction between Cloudflare's two Worker-to-domain mechanisms: a **Route** requires a DNS record you create and manage yourself first; a **Custom Domain** (the mechanism identified in C) has Cloudflare **automatically create and manage the required proxied DNS record** the moment it's attached — no manual `A`/`CNAME`/`AAAA` record is needed or should be created. For `www` (per D), a Redirect Rule likewise doesn't require a manual DNS record for the redirect logic itself, though Cloudflare will show a `www` DNS entry as part of standard zone setup — this will be handled through the Redirect Rule UI, not a manual record.
+
+### F. Expected SSL/TLS configuration
+
+Workers Custom Domains serve exclusively over HTTPS with a **Cloudflare-managed Universal SSL certificate**, provisioned automatically at attachment time — no manual certificate work, no CSR, no manual SSL mode selection required. Because the Worker itself is the origin (there is no separate backend server behind this DNS record the way there would be for a proxied A/CNAME to a real server), the traditional Flexible/Full/Full-Strict SSL-mode distinction that matters for origin-proxied zones is largely moot here — Cloudflare terminates and serves TLS directly at the edge for Custom Domain-bound Workers. Not changed in this phase; documented as the expected default behavior once attached.
+
+### Current blocker
+
+**Cloudflare zone activation is still pending** — independently confirmed as expected propagation lag (registry-level NS delegation has already succeeded per public DNS; Cloudflare's own internal activation check hasn't completed yet). No action is needed from the client beyond waiting; this typically resolves within a few hours of a correct nameserver change, occasionally longer. Once the Cloudflare dashboard (or a re-check of `GET /zones?name=rajadhaniyam.in`) shows `status: "active"`, the single action in C can be taken.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
