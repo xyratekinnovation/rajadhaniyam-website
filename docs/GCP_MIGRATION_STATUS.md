@@ -1356,6 +1356,27 @@ This was **not performed by the assistant** — no write-path testing was done i
 
 No DNS, Cloudflare Custom Domain, Worker code, Render, Supabase, or Razorpay changes occurred in this phase. `www.rajadhaniyam.in` remains unconfigured.
 
+## Phase 19G: Production COD test transaction cleaned up (2026-09-18)
+
+The user confirmed the unexpected live-site checkout identified in Phase 19 was their own test. Cleanup was scoped to that single transaction only — no schema change, no migration, no broad cleanup, no Razorpay operation, no DNS/Cloudflare/Render change. No customer PII is recorded in this entry.
+
+**Identification**: read-only queries against the production database (via the `DATABASE_URL_PRODUCTION` secret, connection string never printed, non-PII fields only) found **two** orders from 2026-09-18 against a dedicated test product (SKU `test-200`, not a real catalog item):
+- One **Razorpay/UPI** attempt, already self-resolved (`status: CANCELLED`, `paymentStatus: FAILED`) before this phase began — **not touched**, since it wasn't COD and required no Razorpay action per instructions.
+- One **COD** order, still `status: PENDING` — matched the user's own description ("this was a COD test") unambiguously. This was the cleanup target.
+
+**Cleanup performed**: the target order was cancelled using the exact same transaction logic the application itself uses for order cancellation (`orders.service.ts`'s status-update path: increment `ProductVariant.stock` and `Inventory.quantity` for each order item, then set `Order.status = CANCELLED`) — reproduced directly against the production database rather than through the admin API, since no admin session exists in this environment. No `Payment` row was modified (matching the app's own cancellation behavior, which doesn't touch `Payment`) and no Razorpay call was made at any point, consistent with this being a COD order.
+
+**Verification (read-only, after cleanup)**:
+- Stock restored exactly: `5 → 6` (both `ProductVariant.stock` and its mirrored `Inventory.quantity`), matching the single unit consumed by the cancelled order.
+- Order status confirmed `CANCELLED`.
+- The other same-day (Razorpay) order confirmed unchanged.
+- The 4 most recent orders from prior dates (Sep 15/16) confirmed unchanged.
+- No user account was created by this test — the order's `userId` was `null` (guest/COD checkout), and no `/auth/register` call appears anywhere in the Phase 19 request logs.
+- **One unrelated leftover cart item was found** referencing the same test product, but tied to a different, earlier test session (2026-09-16, a registered test user account) — **explicitly left untouched**, since it falls outside this phase's narrow "only this specific test transaction" approval and touching it would be exactly the kind of broad/unrelated cleanup the instructions prohibit.
+- Today's specific test's own cart was already cleared automatically by the checkout flow itself (standard application behavior) — no separate cart cleanup was needed for it.
+
+All one-off verification/cleanup scripts were written to `apps/api/scripts/_temp_*.ts`, run, and deleted immediately after — none were committed (`git status` confirmed clean before this documentation commit).
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
