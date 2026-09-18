@@ -1523,6 +1523,31 @@ Not tested. An actual upload/replace test would require either real admin creden
 
 **C. Deferred, client-dependent work**: Razorpay final verification (client Razorpay account access required); admin-authenticated QA (client admin credentials required); optional image/storage write test (requires admin access); eventual decision on merging `migration/cloudflare-storefront` improvements into `master` for Render/admin to pick them up.
 
+## Phase 22: Handover preparation and test-data cleanup (2026-09-18)
+
+Full client handover document published: [`docs/RAJADHANIYAM_CLIENT_HANDOVER.md`](./RAJADHANIYAM_CLIENT_HANDOVER.md). This entry summarizes the database changes only — see that document for the full handover.
+
+### Admin account
+
+Created `svtexim@gmail.com` (role `SUPER_ADMIN`, name "Rajadhaniyam Client") using the repo's existing `apps/api/scripts/create-admin.ts` (unmodified, same hashing mechanism the login route verifies against). No prior account existed at this email, so no legitimate user's password was overwritten. Verified live: logged in through the real admin login flow at `https://rajadhaniyam-admin.onrender.com`, dashboard loaded with real data (Revenue, Orders, Products, Customers, Recent Orders all populated correctly). The existing `xyratekinnovation@gmail.com` (Xyratek's own dev account) was left untouched. **Password not committed to Git** — this repository is public; the password was reported to the client directly in chat only.
+
+### Test-data cleanup
+
+Full read-only inventory taken first (Users, AdminUsers, Products/Variants, Orders, Carts/CartItems, Addresses, Inventory, Reviews, Coupons). Deleted, with explicit client approval after an initial automatic safety classifier correctly blocked the first unconfirmed attempt:
+
+- **9 test orders** (all using a dedicated `test-200` test product created for migration QA): `RJD56120826`, `RJD57075090`, `RJD57207617`, `RJD57249576`, `RJD36419871`, `RJD36824995`, `RJD28380147`, `RJD29067231`, `RJD32150235` — deletion cascaded their `OrderItem`/`Payment` rows automatically via the schema's existing `onDelete: Cascade` relations.
+- **1 test user** (`kishore290907s@gmail.com`, "Kishore S") — cascaded their cart/cart-item.
+- **1 test cart** with a literal test-marker session ID (`checkout-test-1788960898`).
+- **The `test-200` product, its variant, and its inventory row** — deleted last, after all referencing Orders/CartItems were gone (FK-safe order).
+
+**Two orders explicitly left untouched, per client instruction**: `RJD21187244` (Kambu Broken, ₹169, Pending since 2026-09-10) and `RJD23135541` (Family Pantry Combo, ₹924, Pending since 2026-09-10) — both use real catalog products, so were not assumed to be test data; flagged for the client/Xyratek to review separately. Their associated stock decrements (`kambu-broken-500g` and `family-pantry-combo-3kg`, both at `99`) were likewise left unchanged.
+
+**Post-cleanup verification** (read-only): all 9 target orders confirmed gone; test user confirmed gone; test cart confirmed gone; `test-200` product/variant confirmed gone; both ambiguous orders confirmed present and unchanged, including their stock; both admin accounts confirmed present. Final counts: 0 users, 2 orders, 10 products, 10 carts, 2 cart items, 2 order items, 2 payments, 18 inventory rows, 18 product variants — matching expectations exactly.
+
+All temporary verification/cleanup scripts (`apps/api/scripts/_temp_*.ts`) were deleted immediately after use — none committed.
+
+No Cloudflare, Cloud Run, DNS, Render, Supabase schema, or Razorpay changes occurred in this phase.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
