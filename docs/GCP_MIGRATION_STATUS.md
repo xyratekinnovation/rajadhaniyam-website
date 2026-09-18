@@ -1230,6 +1230,96 @@ Workers Custom Domains serve exclusively over HTTPS with a **Cloudflare-managed 
 
 **Cloudflare zone activation is still pending** — independently confirmed as expected propagation lag (registry-level NS delegation has already succeeded per public DNS; Cloudflare's own internal activation check hasn't completed yet). No action is needed from the client beyond waiting; this typically resolves within a few hours of a correct nameserver change, occasionally longer. Once the Cloudflare dashboard (or a re-check of `GET /zones?name=rajadhaniyam.in`) shows `status: "active"`, the single action in C can be taken.
 
+## Phase 18: Production custom domain LIVE — `rajadhaniyam.in` attached (2026-09-18)
+
+**`https://rajadhaniyam.in` now serves the production storefront.** GoDaddy, Render, Supabase, and Razorpay were not touched. `www` intentionally left unconfigured, per instructions.
+
+### A. Pre-attachment verification
+
+All checks via Cloudflare's API (read-only GETs, same authenticated `wrangler` OAuth token used throughout):
+1. Zone `rajadhaniyam.in` — **`status: "active"`** (confirmed, no longer "pending").
+2. Production Worker `rajadhaniyam-storefront-production` — confirmed to exist.
+3. Custom Domains for this account/zone — **empty list**, nothing attached yet.
+4. Zone-level Worker Routes — **empty list**, none configured.
+
+### B. Custom Domain attached
+
+```
+PUT /accounts/{account_id}/workers/domains
+{"hostname": "rajadhaniyam.in", "zone_id": "2431f5fcff752248964e9636b2b52b24",
+ "service": "rajadhaniyam-storefront-production", "environment": "production"}
+```
+Succeeded immediately. No Worker redeploy — this was a pure attachment operation on the already-deployed script (same script from Phase 16, unchanged). No Worker code was touched.
+
+### C. Resulting Cloudflare configuration (verified)
+
+| Field | Value |
+|---|---|
+| Custom Domain ID | `76b0bd392a5a57e63c2081e071bf983e4072b106` |
+| Hostname | `rajadhaniyam.in` — exact match, no `www`, no subdomain |
+| Bound service | `rajadhaniyam-storefront-production` |
+| Environment | `production` |
+| `cert_id` | `0148b5be-6cad-4ae8-a95b-eb49f24a1550` — SSL certificate issued automatically by Cloudflare at attachment time |
+| `enabled` | `true` |
+| DNS record | Auto-created and managed by Cloudflare as part of the Custom Domain mechanism — confirmed indirectly via public DNS: `rajadhaniyam.in` now resolves to Cloudflare's own anycast IPs (`104.21.41.110`, `172.67.164.112`), not a manually created record (direct `zones/.../dns_records` introspection wasn't available under this token's scope, but the resolution result confirms the record exists and is Cloudflare-managed) |
+
+### D. Live read-only tests — `https://rajadhaniyam.in`
+
+Local DNS resolution in this environment lagged slightly behind the public record, so tests used `curl --resolve` pointed at Cloudflare's own IP (a standard technique to bypass local resolver cache — the actual TLS handshake and HTTP request still went to the real `rajadhaniyam.in` hostname over the public internet, cert and all):
+
+| Path | HTTP status |
+|---|---|
+| `/` | 200 |
+| `/shop` | 200 |
+| `/login` | 200 |
+| `/register` | 200 |
+| `/cart` | 200 |
+| `/checkout` | 200 |
+| `/account` | 200 |
+| `/orders` | 200 |
+
+All 8 pages render successfully. Further verification:
+- **TLS**: `curl` (which validates certificates by default, no `-k`/insecure flag used) completed a full HTTPS handshake and returned `200` — a broken/invalid/mismatched certificate would have failed the request outright, so this is direct proof the SSL certificate is valid and trusted.
+- **Homepage headers**: `Server: cloudflare`, `CF-RAY` present, plain `200 OK` with **no `Location` header** — confirms no redirect loop and no accidental redirect to Render.
+- **Content origin check**: homepage image URLs resolve to `https://rajadhaniyam.in/assets/...` (self-referential — only possible because production Cloud Run's `STOREFRONT_URL` is set to this exact domain), admin link correctly shows `https://rajadhaniyam-admin.onrender.com`. No `rajadhaniyam-api-staging`, no `rajadhaniyam-api.onrender.com`, no `.com` reference anywhere in the page.
+- **Static assets**: `/assets/styles-*.css` → `200`.
+- **Product data**: `/shop` page contains real product data ("Kambu Broken").
+- No forms submitted, no account created, no cart/order written, no checkout/payment performed.
+
+### E. Production API verification — partial, with an honest gap
+
+**Direct Cloud Run log confirmation could not be completed in this phase.** Midway through verification, the `gcloud` CLI's cached credentials for `monisha@xyratek.in` expired and required interactive re-authentication (`Reauthentication failed: cannot prompt during non-interactive execution`) — this affected **all** `gcloud`/GCP API calls (confirmed by testing an unrelated, previously-working command), not anything specific to this phase's work. It is unrelated to Cloudflare, DNS, or the domain attachment, which used a separate, still-valid credential (`wrangler`'s own OAuth token) and were unaffected.
+
+**Strong indirect evidence in place of direct logs**: the content-origin check in D is only possible if the SSR page data came from `rajadhaniyam-api-production` — no other service (staging, Render) has `STOREFRONT_URL` set to `rajadhaniyam.in`. Combined with zero non-200 responses across all 8 page loads and all embedded asset/API-driven content rendering correctly, this strongly indicates the production API was reached cleanly with no 5xx/Prisma/Supabase/CORS failures — but it is not the same as reading the actual Cloud Run request logs directly.
+
+**Follow-up needed**: once `gcloud auth login` is re-run (interactive, the client's own terminal — cannot be done from this session), a direct log check against `rajadhaniyam-api-production` for this test window should be done to fully close out 18E. Flagged as a remaining item below, not a blocker to the domain being live.
+
+### F. Domain/URL behavior — confirmed
+
+- HTTPS works, valid certificate (per D).
+- Homepage renders, product images load from the correct self-referential origin.
+- API-driven content (products, categories) renders correctly on every tested page.
+- No redirect loop, no accidental redirect to Render.
+- No staging references anywhere in the served content.
+- `www.rajadhaniyam.in` **not configured** — confirmed via public DNS (`NXDOMAIN`) and via the Custom Domains list (exactly one entry, root only) — exactly as instructed, not touched.
+
+### G. Rollback
+
+Not needed — attachment succeeded on the first attempt, no errors at any step. Temporary Worker URL (`https://rajadhaniyam-storefront-production.xyratekinnovation.workers.dev`) remains active and unaffected alongside the new custom domain.
+
+### Confirmed unchanged
+
+GoDaddy nameservers, Render (all three services, still running, still the rollback target), Supabase (no writes, no schema/migration changes), Razorpay (no webhook/credential changes), and the existing Cloudflare preview Worker were not touched at any point in this phase.
+
+### Remaining blockers
+
+1. **`gcloud` session needs re-authentication** (`gcloud auth login`, interactive, client's own terminal) before a direct Cloud Run log check can confirm 18E with full rigor — the live-site tests already strongly indicate success, but this closes the loop properly.
+2. `www.rajadhaniyam.in` still not configured — next step, not started per instructions (Redirect Rule, per Phase 17D).
+3. Production Razorpay webhook still misconfigured (unchanged, client's action, from Phase 14).
+4. `SUPABASE_URL` still unset on staging (unchanged, out of scope, from Phase 15).
+5. No write-path (auth/cart/checkout/payment) testing has been performed against the live domain — correctly deferred, per this phase's read-only scope and the standing shared-database caution.
+6. Render has not been decommissioned and remains the rollback target, exactly as instructed.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
