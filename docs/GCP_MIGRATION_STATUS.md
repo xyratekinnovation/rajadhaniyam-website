@@ -1377,6 +1377,35 @@ The user confirmed the unexpected live-site checkout identified in Phase 19 was 
 
 All one-off verification/cleanup scripts were written to `apps/api/scripts/_temp_*.ts`, run, and deleted immediately after — none were committed (`git status` confirmed clean before this documentation commit).
 
+## Phase 20: `www` redirect — method determined, execution blocked on API permissions (2026-09-18)
+
+No configuration change was made. Nothing in Cloudflare, GCP, Render, Supabase, or Razorpay was touched.
+
+### A. Correct method (determined, not guessed)
+
+1. A proxied DNS record for `www` (`CNAME www → rajadhaniyam.in`, orange-clouded) — required so Cloudflare's edge receives requests for `www.rajadhaniyam.in` at all; without it, the hostname simply doesn't resolve (confirmed `NXDOMAIN` currently) and no redirect rule could ever fire.
+2. A zone-level **Redirect Rule** (Cloudflare's "Dynamic Redirect" ruleset, not a Worker Route and not application code) matching `http.host eq "www.rajadhaniyam.in"`, redirecting to the dynamic expression `concat("https://rajadhaniyam.in", http.request.uri.path)`, `preserve_query_string: true`, `status_code: 301`.
+
+This is the standard, Cloudflare-native mechanism — no Worker redeploy, no code change, exactly as instructed.
+
+### B. Execution — blocked
+
+The Cloudflare credential available in this session (the `wrangler` CLI's own OAuth session token, the same one used for all prior Worker/Custom-Domain work) **does not have DNS or Redirect Rules permission**. Verified directly: `GET /zones/{id}/dns_records` and `GET /zones/{id}/rulesets` both return `"Authentication error"` with this token, while account-level Workers calls succeed — this is a real, structural scope boundary (this token is fixed to Workers-deployment permissions by how `wrangler login` provisions it), not something bypassable or worth working around.
+
+**Not attempted**: no DNS record was created, no redirect rule was created, nothing in Cloudflare changed.
+
+### C–D. Verify / safety check — N/A
+
+Not applicable — no change was made to verify. Confirmed as a side-effect of the permission check itself: `rajadhaniyam.in` root Custom Domain, the preview Worker, production Worker code, Cloud Run, Render, Supabase, and Razorpay are all unchanged (only read-only/failed-auth calls were made).
+
+### To unblock — two options for the client
+
+**Option 1 (fastest — manual, ~2 minutes)**: in the Cloudflare Dashboard, for the `rajadhaniyam.in` zone:
+1. **DNS → Records → Add record**: Type `CNAME`, Name `www`, Target `rajadhaniyam.in`, Proxy status **Proxied** (orange cloud) → Save.
+2. **Rules → Redirect Rules → Create rule**: When incoming requests match → Hostname equals `www.rajadhaniyam.in`; Then → Dynamic redirect, expression `concat("https://rajadhaniyam.in", http.request.uri.path)`, enable **Preserve query string**, Status code `301` → Save and Deploy.
+
+**Option 2**: grant this session a Cloudflare API Token (not the current OAuth session) with `Zone → DNS → Edit` and `Zone → Single Redirect/Dynamic Redirect → Edit` permissions for the `rajadhaniyam.in` zone specifically, added to this environment (not pasted as plaintext in chat, for the same reason a database password shouldn't be) — I can then execute A/B/C/D exactly as planned.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
