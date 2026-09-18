@@ -1406,6 +1406,33 @@ Not applicable — no change was made to verify. Confirmed as a side-effect of t
 
 **Option 2**: grant this session a Cloudflare API Token (not the current OAuth session) with `Zone → DNS → Edit` and `Zone → Single Redirect/Dynamic Redirect → Edit` permissions for the `rajadhaniyam.in` zone specifically, added to this environment (not pasted as plaintext in chat, for the same reason a database password shouldn't be) — I can then execute A/B/C/D exactly as planned.
 
+## Phase 20 (continued): `www` redirect configured manually by the client, verified (2026-09-18)
+
+The client completed Option 1 manually via the Cloudflare Dashboard (this session still lacked DNS/Redirect Rules API permission, so this could not be done from here):
+1. Created a proxied `www` CNAME record (`www → rajadhaniyam.in`, Proxied).
+2. Deployed Cloudflare's built-in **"Redirect from WWW to root"** Redirect Rule template — wildcard match `https://www.*` → target `https://${1}` (the single wildcard capture already includes domain-after-`www.` + path + query together, so "Preserve query string" was correctly left unchecked to avoid double-appending it), status code `301`.
+
+### Verification (all via live HTTPS requests, read-only)
+
+| Test | Result |
+|---|---|
+| `https://www.rajadhaniyam.in/` | `301`, `Location: https://rajadhaniyam.in/` |
+| `https://www.rajadhaniyam.in/shop` | `301`, `Location: https://rajadhaniyam.in/shop` — path preserved |
+| `https://www.rajadhaniyam.in/shop?category=millet-grains` | `301`, `Location: https://rajadhaniyam.in/shop?category=millet-grains` — path **and** query string preserved |
+| Full redirect follow (`curl -L`) on `/shop` | Exactly 1 redirect hop, final status `200`, final URL `https://rajadhaniyam.in/shop` — **no redirect loop** |
+| `https://rajadhaniyam.in/` (root, unaffected) | `200` |
+| `https://rajadhaniyam.in/shop`, `/login` (root, unaffected) | `200`, `200` |
+
+### Safety check
+
+- Root Custom Domain re-verified via Cloudflare API: still exactly `rajadhaniyam.in` → `rajadhaniyam-storefront-production`, single entry, unchanged.
+- Preview Worker re-checked: still `200`, untouched.
+- Production Worker code: not modified — this was a zone-level Redirect Rule + DNS record only, no Worker redeploy occurred.
+- Cloud Run, Render, Supabase, Razorpay: not touched at any point in this phase.
+- No database writes, no orders/users/cart data created, no payment testing.
+
+**`www.rajadhaniyam.in` now correctly and permanently redirects to `https://rajadhaniyam.in`, preserving path and query string, with zero side effects on the root domain or any other part of the stack.**
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
