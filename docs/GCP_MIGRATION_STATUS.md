@@ -1320,6 +1320,42 @@ GoDaddy nameservers, Render (all three services, still running, still the rollba
 5. No write-path (auth/cart/checkout/payment) testing has been performed against the live domain — correctly deferred, per this phase's read-only scope and the standing shared-database caution.
 6. Render has not been decommissioned and remains the rollback target, exactly as instructed.
 
+## Phase 19: Cloud Run log verification completed + real live-site order found (2026-09-18)
+
+### A. GCP re-authentication
+
+Client ran `gcloud auth login` interactively in their own terminal. Re-checked: `gcloud auth print-access-token` now succeeds, active account confirmed as `monisha@xyratek.in`. **Resolved** — the Phase 18 blocker is closed.
+
+### B/C/D. Cloud Run log verification, error check, origin verification
+
+Queried `rajadhaniyam-api-production`'s logs directly (Cloud Logging REST API, same account) for the Phase 18 test window (`2026-09-18T09:35:00Z`–`09:55:00Z`, matching the actual test timestamps) and a broader window through `10:49Z`:
+
+**Phase 18 test window specifically (09:35–09:55Z)**: **100 requests** (API page-limited to 100 per call; the true count is at or above this), **all `status: 200`**, zero errors. Paths match exactly what SSR page loads for `/`, `/shop`, `/login`, `/register`, `/cart`, `/checkout`, `/account`, `/orders` would generate: `/products` (multiple, including per-category and per-product-slug variants), `/categories`, `/content/hero`, `/content/banners`, `/settings/shipping`, `/cart`. All remote IPs in this window are Cloudflare edge/anycast ranges (`104.22.x`, `104.23.x`, `141.101.x`, `162.158.x`, `162.159.x`, `172.68–172.71.x`) — consistent with traffic arriving via the Cloudflare Worker, not a direct client.
+
+**Full fetched window (09:00–10:49Z, 100 entries, page-limited)**: status breakdown — **83× `200`, 16× `204`** (CORS preflight `OPTIONS`), **1× `201`** (see below). **Zero 4xx, zero 5xx**, across every entry examined. All 100 entries `severity: INFO` — no `WARNING`/`ERROR`/`CRITICAL`. No Prisma, database-connection, Supabase, CORS-failure, startup, or missing-env-var errors found anywhere in either window.
+
+**Origin confirmation**: both queries filtered explicitly on `resource.labels.service_name="rajadhaniyam-api-production"` — by construction, no staging or Render entry could appear in this result set. Combined with Phase 16's build-output check (staging/Render URLs absent from the production Worker's bundle) and Phase 18's content-origin proof (self-referential `rajadhaniyam.in` image URLs), origin is confirmed through three independent methods.
+
+### ⚠️ Finding: a real order was placed on the live site (not part of any test in this migration)
+
+The `201 Created` response above is `POST /checkout`, at `2026-09-18T10:49:09Z` — **about an hour after** the Phase 18 test window, from a real browser (`Chrome/152.0.0.0`, Windows), not from any `curl`-based test run in this migration. Full sequence reconstructed from the logs, all from the same client IP:
+
+```
+10:45:51Z  GET  /settings/shipping        200
+10:45:51Z  GET  /cart                     200
+10:46:17Z  POST /cart/items               200   (item added to cart)
+10:49:09Z  POST /checkout                 201   (order created)
+```
+(Standard CORS preflight `OPTIONS` calls interleaved, all `204`, omitted above for clarity.)
+
+This was **not performed by the assistant** — no write-path testing was done in Phase 18 or 19 (both were explicitly GET-only). This reads as someone — most likely the client, browsing their own newly-live site — actually adding a product to cart and completing checkout for real, creating a genuine `Order`/`OrderItem`/`Payment` row and a real stock decrement in the shared production database (per the standing Phase 12A warning: staging and production share one Supabase project, so this order exists in the same database staging also reads/writes). No Razorpay endpoints (`/payments/verify`, `/payments/webhook`) appear in this sequence, consistent with a COD order.
+
+**No cleanup was performed** — per standing instructions, the assistant does not modify or clean production data automatically. **This needs your confirmation**: if this was you testing the live site, you may want to review/cancel it the same way earlier test orders were cleaned up; if it's a genuine customer order, it should go through normal fulfillment instead. Either way, nothing was touched here — this section only reports what the logs show.
+
+### E. No changes made
+
+No DNS, Cloudflare Custom Domain, Worker code, Render, Supabase, or Razorpay changes occurred in this phase. `www.rajadhaniyam.in` remains unconfigured.
+
 ## Safety restrictions (standing, for every future session on this migration)
 
 - Do not merge into `master`/`main`.
