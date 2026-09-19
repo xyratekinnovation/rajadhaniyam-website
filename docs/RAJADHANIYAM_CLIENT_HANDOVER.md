@@ -105,7 +105,7 @@ Verified working on the live production site (`https://rajadhaniyam.in`) as of t
 - Admin panel login and dashboard (products, orders, customers)
 - Mobile and tablet responsive layout — tested on phone-width and tablet-width screens with no layout issues found
 
-**Search — not yet functional.** The search icon in the header does not currently perform a search; this predates this migration (it was already non-functional before the hosting change) and is **not** something the migration broke. It's listed here so it isn't mistaken for a new problem.
+**Search — now working.** The search icon in the header opens a search box; searching shows matching products on the shop page (by name, category, or description, and tolerant of spelling like "ragi" vs "Raagi"). Search was a non-functional placeholder before this migration and was built and added on 2026-09-19 at the client's request.
 
 ---
 
@@ -113,10 +113,9 @@ Verified working on the live production site (`https://rajadhaniyam.in`) as of t
 
 These existed before the migration and were not introduced by it:
 
-1. **Search is a placeholder** — the search icon has no functionality wired up yet. Would need to be built as a new feature if wanted.
-2. **No Privacy Policy / Terms of Service pages** — the site doesn't currently have these pages or footer links to them. Worth adding before wide marketing, especially since the site accepts payments and collects customer addresses.
-3. **Admin login page cosmetic text** — the admin panel's login screen shows a placeholder example email using `.com` instead of `.in`. Purely cosmetic (doesn't affect login), and will be resolved once the `migration/cloudflare-storefront` branch is merged into `master`.
-4. **Two older, unresolved test orders were found** during this handover's data review and were **deliberately left untouched** pending your review: order `RJD21187244` (₹169, Kambu Broken) and `RJD23135541` (₹924, Family Pantry Combo), both dated 2026-09-10, both still "Pending" and never completed or cancelled. These use real products (not test items), so we did not assume they were test data — please check these two in the admin Orders list and cancel or fulfill them as appropriate.
+1. **No Privacy Policy / Terms of Service pages** — the site doesn't currently have these pages or footer links to them. Worth adding before wide marketing, especially since the site accepts payments and collects customer addresses.
+2. **Admin login page cosmetic text** — the admin panel's login screen shows a placeholder example email using `.com` instead of `.in`. Purely cosmetic (doesn't affect login), and will be resolved once the `migration/cloudflare-storefront` branch is merged into `master`.
+3. **Two older, unresolved test orders were found** during this handover's data review and were **deliberately left untouched** pending your review: order `RJD21187244` (₹169, Kambu Broken) and `RJD23135541` (₹924, Family Pantry Combo), both dated 2026-09-10, both still "Pending" and never completed or cancelled. These use real products (not test items), so we did not assume they were test data — please check these two in the admin Orders list and cancel or fulfill them as appropriate.
 
 ---
 
@@ -140,7 +139,7 @@ As part of this handover, all development/testing data accumulated during the mi
 - 1 test shopping cart session
 - The dedicated test product itself (was never a real catalog item)
 
-**Left untouched, for your review** (see Section 7, item 4):
+**Left untouched, for your review** (see Section 7, item 3):
 - 2 older orders using real products that couldn't be confidently confirmed as test data
 
 **Preserved, unaffected**:
@@ -178,6 +177,5 @@ Going forward, these are yours to manage:
 
 - Complete the Razorpay final verification before promoting online payments to customers (Section 8).
 - Add Privacy Policy / Terms of Service pages, especially given the site handles payments and customer addresses.
-- Decide on and implement real site search, if desired.
 - Review and resolve the two pending orders flagged in Section 7.
 - Once the new Cloudflare + Cloud Run setup has run stably for a period you're comfortable with, consider merging `migration/cloudflare-storefront` into `master` so the admin app and any future Render deployments stay fully in sync, and consider decommissioning the old Render storefront/API rollback services (URLs #7–8 in Section 4) to simplify the infrastructure.

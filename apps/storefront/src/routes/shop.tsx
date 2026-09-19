@@ -6,13 +6,14 @@ import { Eyebrow } from "@/components/site/ui";
 import { cn } from "@/lib/utils";
 import { productService, categoryService } from "@/services";
 
-type Search = { category?: string; sort?: string };
+type Search = { category?: string; sort?: string; q?: string };
 
 export const Route = createFileRoute("/shop")({
   validateSearch: (search: Record<string, unknown>): Search => {
     const result: Search = {};
     if (typeof search["category"] === "string") result.category = search["category"];
     if (typeof search["sort"] === "string") result.sort = search["sort"];
+    if (typeof search["q"] === "string" && search["q"].trim()) result.q = search["q"].trim();
     return result;
   },
   loader: async () => {
@@ -41,19 +42,28 @@ export const Route = createFileRoute("/shop")({
 });
 
 function Shop() {
-  const { category, sort } = Route.useSearch();
+  const { category, sort, q } = Route.useSearch();
   const { products, categories } = Route.useLoaderData();
   const navigate = Route.useNavigate();
   const [maxPrice, setMaxPrice] = useState(1200);
 
   const list = useMemo(() => {
     let l = products.filter((p) => (category ? p.categorySlug === category : true));
+    if (q) {
+      // Collapse doubled letters on both sides so "ragi" finds "Raagi" and vice versa.
+      const norm = (s: string) => s.toLowerCase().replace(/(.)\1+/g, "$1");
+      const terms = norm(q).split(/\s+/).filter(Boolean);
+      l = l.filter((p) => {
+        const haystack = norm(`${p.name} ${p.category} ${p.description ?? ""}`);
+        return terms.every((t) => haystack.includes(t));
+      });
+    }
     l = l.filter((p) => p.price <= maxPrice);
     if (sort === "price-asc") l = [...l].sort((a, b) => a.price - b.price);
     if (sort === "price-desc") l = [...l].sort((a, b) => b.price - a.price);
     if (sort === "rating") l = [...l].sort((a, b) => b.rating - a.rating);
     return l;
-  }, [products, category, sort, maxPrice]);
+  }, [products, category, sort, maxPrice, q]);
 
   const active = categories.find((c) => c.slug === category);
 
@@ -168,7 +178,18 @@ function Shop() {
 
         <div>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
-            <p className="text-xs text-muted-foreground">{list.length} products</p>
+            <p className="text-xs text-muted-foreground">
+              {q ? `${list.length} results for "${q}"` : `${list.length} products`}
+              {q ? (
+                <Link
+                  to="/shop"
+                  search={category ? { category } : {}}
+                  className="ml-3 underline hover:text-olive"
+                >
+                  Clear search
+                </Link>
+              ) : null}
+            </p>
             <select
               value={sort ?? ""}
               onChange={(e) =>

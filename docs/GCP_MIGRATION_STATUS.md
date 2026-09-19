@@ -1562,3 +1562,9 @@ No Cloudflare, Cloud Run, DNS, Render, Supabase schema, or Razorpay changes occu
 - Do not change the Supabase database schema.
 - Do not print secret values in terminal output, commits, or this file — names only.
 - Do not commit `.env` files, credentials, or service-account keys.
+
+## Post-handover: site search implemented (2026-09-19)
+
+Requested by the client. The header search icon previously had no handler (pre-existing placeholder, see Phase 8/21). Now: icon opens a search box that navigates to `/shop?q=<term>`; `apps/storefront/src/routes/shop.tsx` filters the already-loaded product list by name/category/description (all terms must match; doubled letters collapsed so "ragi" matches "Raagi"), shows "N results for …" with a Clear-search link and the existing empty state. No API change. Files: `components/site/Header.tsx`, `routes/shop.tsx`.
+
+Verified on the staging preview Worker first (typecheck clean; `nuts`→3, `ragi`→3, nonsense→0 with empty state; mobile 375px no overflow), then deployed to production Worker `rajadhaniyam-storefront-production` (version `d1b425fd-f1b1-4589-9a5f-bf2cc59d8eaf`; bundle checked for no staging URLs) and re-verified on `https://rajadhaniyam.in` (`/shop?q=ragi` → Raagi Flour, Raagi Whole, Sprouted Raagi Mix). Preview Worker redeployed with the same code (version `a39b39a2-c4a6-413e-a99a-6106905a0200`). Custom domain, DNS, Cloud Run, Supabase, Razorpay untouched. Search is no longer a known issue.

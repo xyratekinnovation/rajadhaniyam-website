@@ -1,6 +1,6 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Menu, Search, ShoppingBag, User, X, Headphones, Truck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import logo from "@/assets/logo.png";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
@@ -20,6 +20,23 @@ export function Header() {
   const { customer, isReady } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchInput = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (searchOpen) searchInput.current?.focus();
+  }, [searchOpen]);
+
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+    setSearchOpen(false);
+    setMenu(false);
+    navigate({ to: "/shop", search: { q } as never });
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -75,8 +92,13 @@ export function Header() {
           </nav>
 
           <div className="flex items-center justify-end gap-1 sm:gap-3">
-            <button aria-label="Search" className="p-2 text-charcoal/80 hover:text-olive">
-              <Search className="h-[1.15rem] w-[1.15rem]" />
+            <button
+              aria-label="Search"
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((v) => !v)}
+              className="p-2 text-charcoal/80 hover:text-olive"
+            >
+              {searchOpen ? <X className="h-[1.15rem] w-[1.15rem]" /> : <Search className="h-[1.15rem] w-[1.15rem]" />}
             </button>
             <Link
               to={isReady && customer ? "/account" : "/login"}
@@ -106,6 +128,33 @@ export function Header() {
             </button>
           </div>
         </div>
+
+        {searchOpen ? (
+          <form
+            role="search"
+            onSubmit={submitSearch}
+            className="border-t border-border bg-paper px-4 py-3 sm:px-6"
+          >
+            <div className="mx-auto flex max-w-7xl items-center gap-3">
+              <input
+                ref={searchInput}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setSearchOpen(false)}
+                placeholder="Search millets, flours, nuts…"
+                aria-label="Search products"
+                className="h-11 w-full border border-input bg-paper px-4 text-sm outline-none focus:border-olive"
+              />
+              <button
+                type="submit"
+                className="h-11 shrink-0 bg-olive px-6 text-xs font-semibold uppercase tracking-[0.14em] text-paper hover:bg-olive-deep"
+              >
+                Search
+              </button>
+            </div>
+          </form>
+        ) : null}
 
         {menu ? (
           <nav className="border-t border-border bg-paper px-6 py-4 xl:hidden">
